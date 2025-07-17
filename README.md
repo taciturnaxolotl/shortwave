@@ -6,7 +6,44 @@ an app for [rewind](https://rewind.hackclub.com/#)
 
 ## Install
 
-You can download a pre-built binary from the releases or you can cross compile the app for windows xp; i'll add a nix way soonish
+You can download a pre-built binary from the releases or build it yourself using the nix flake.
+
+## Development
+
+this project uses nix for cross-compilation to windows xp. the key was using an older nixpkgs (22.05) since newer mingw toolchains use windows apis that don't exist in xp.
+
+### Quick Start
+
+```bash
+# enter the dev environment (or use direnv)
+nix develop
+
+# build the app
+nix build
+
+# deploy to my xp vm folder
+deploy-to-xp
+```
+
+### Editor Setup (Zed)
+
+to get proper intellisense for win32 apis in zed:
+
+```bash
+# generate .clangd config with proper mingw headers
+setup-dev
+
+# restart zed
+```
+
+this creates a `.clangd` file that points to the actual mingw-w64 headers and avoids gcc intrinsics that cause clang issues.
+
+### Build Details
+
+- uses mingw-w64 cross-compiler targeting i686-w64-mingw32
+- statically links runtime to avoid dll dependencies  
+- targets windows xp (winver=0x0501) for maximum compatibility
+- older nixpkgs (22.05) prevents "procedure entry point" errors on xp
 
 ~
 
