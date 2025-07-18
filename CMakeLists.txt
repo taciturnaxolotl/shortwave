@@ -15,7 +15,7 @@ add_compile_options(-fno-threadsafe-statics)
 add_compile_options(-D_GLIBCXX_HAS_GTHREADS=0)
 
 add_executable(HelloWorldApp WIN32 main.cpp)
-target_link_libraries(HelloWorldApp user32 gdi32)
+target_link_libraries(HelloWorldApp user32 gdi32 winmm)
 
 # Include current directory for headers
 target_include_directories(HelloWorldApp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
