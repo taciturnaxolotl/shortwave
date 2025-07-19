@@ -67,7 +67,10 @@
 
             deploy-to-xp = pkgs.writeShellScriptBin "deploy-to-xp" ''
               echo "rebuilding program"
-              nix build --rebuild
+              if ! nix build --rebuild; then
+                echo "Rebuild failed, attempting normal build..."
+                nix build
+              fi
 
               XP_DIR="$HOME/Documents/xp-drive"
               mkdir -p "$XP_DIR"
@@ -121,7 +124,7 @@
                                 # Get dynamic paths from nix packages
                                 GCC_BASE="${pkgs.pkgsCross.mingw32.buildPackages.gcc}/i686-w64-mingw32"
                                 SYS_INCLUDE="$GCC_BASE/sys-include"
-                                MINGW_MAIN_INCLUDE="${pkgs.pkgsCross.mingw32.windows.mingw_w64}/include"
+                                MINGW_MAIN_INCLUDE="${pkgs.pkgsCross.mingw32.windows.mingw_w64.dev}/include"
                                 CPP_INCLUDE="${pkgs.lib.getDev pkgs.pkgsCross.mingw32.buildPackages.gcc}/include/c++/10.3.0"
                                 CPP_TARGET_INCLUDE="$CPP_INCLUDE/i686-w64-mingw32"
 
