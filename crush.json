@@ -1,0 +1,7 @@
+{
+  "lsp": {
+    "C++": {
+      "command": "clangd"
+    }
+  }
+}

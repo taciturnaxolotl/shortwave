@@ -30,7 +30,6 @@ RadioStation g_stations[] = {
 	{15.770f, "Radio Paradise", "Eclectic music mix", "http://stream.radioparadise.com/mp3-128"},
 	{17.895f, "Jazz Radio", "Smooth jazz", "http://jazz-wr04.ice.infomaniak.ch/jazz-wr04-128.mp3"},
 	{21.500f, "Classical Music", "Classical radio", "http://stream.wqxr.org/wqxr"},
-	{31.100f, "Chillout Lounge", "Relaxing music", "http://air.radiorecord.ru:805/chil_320"}
 };
 
 #define NUM_STATIONS (sizeof(g_stations) / sizeof(RadioStation))
@@ -48,9 +47,13 @@ typedef struct {
 	int isPlaying;
 	float staticVolume;
 	float radioVolume;
-	
+
 	// Station tracking
 	RadioStation* currentStation;
+	
+	// VU meter levels (0.0 to 1.0)
+	float vuLevelLeft;
+	float vuLevelRight;
 } AudioState;
 
 // Radio state
@@ -71,6 +74,7 @@ void DrawRadioInterface(HDC hdc, RECT* rect);
 void DrawTuningDial(HDC hdc, int x, int y, int radius, float frequency);
 void DrawFrequencyDisplay(HDC hdc, int x, int y, float frequency);
 void DrawSignalMeter(HDC hdc, int x, int y, int strength);
+void DrawVUMeter(HDC hdc, int x, int y, float leftLevel, float rightLevel);
 void DrawVolumeKnob(HDC hdc, int x, int y, int radius, float volume);
 void DrawPowerButton(HDC hdc, int x, int y, int radius, int power);
 int IsPointInCircle(int px, int py, int cx, int cy, int radius);
@@ -89,6 +93,15 @@ float GetStationSignalStrength(RadioStation* station, float currentFreq);
 // BASS streaming functions
 int StartBassStreaming(RadioStation* station);
 void StopBassStreaming();
+
+// Static noise functions
+DWORD CALLBACK StaticStreamProc(HSTREAM handle, void* buffer, DWORD length, void* user);
+void StartStaticNoise();
+void StopStaticNoise();
+void UpdateStaticVolume(float signalStrength);
+
+// VU meter functions
+void UpdateVULevels();
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 	// Allocate console for debugging
@@ -147,6 +160,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 	ShowWindow(hwnd, nCmdShow);
 	UpdateWindow(hwnd);
 
+	// Set timer for VU meter updates (30 FPS)
+	SetTimer(hwnd, 1, 33, NULL);
+
 	MSG msg = {};
 	while (GetMessage(&msg, NULL, 0, 0)) {
 		TranslateMessage(&msg);
@@ -176,6 +192,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 			RECT rect;
 			GetClientRect(hwnd, &rect);
+
+			// Update VU levels before drawing
+			if (g_radio.power) {
+				UpdateVULevels();
+			}
 
 			DrawRadioInterface(hdc, &rect);
 
@@ -262,6 +283,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 					if (g_radio.signalStrength < 0) g_radio.signalStrength = 0;
 					if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
 
+					UpdateStaticVolume(g_radio.signalStrength);
 					InvalidateRect(hwnd, NULL, TRUE);
 					break;
 				}
@@ -287,6 +309,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 					if (g_radio.signalStrength < 0) g_radio.signalStrength = 0;
 					if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
 
+					UpdateStaticVolume(g_radio.signalStrength);
 					InvalidateRect(hwnd, NULL, TRUE);
 					break;
 				}
@@ -312,6 +335,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 					if (g_radio.signalStrength < 0) g_radio.signalStrength = 0;
 					if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
 
+					UpdateStaticVolume(g_radio.signalStrength);
 					InvalidateRect(hwnd, NULL, TRUE);
 					break;
 				}
@@ -337,6 +361,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 					if (g_radio.signalStrength < 0) g_radio.signalStrength = 0;
 					if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
 
+					UpdateStaticVolume(g_radio.signalStrength);
 					InvalidateRect(hwnd, NULL, TRUE);
 					break;
 				}
@@ -371,6 +396,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 					break;
 			}
 			return 0;
+
+		case WM_TIMER: {
+			// Timer for VU meter updates
+			if (g_radio.power) {
+				InvalidateRect(hwnd, NULL, FALSE);
+			}
+			return 0;
+		}
 	}
 
 	return DefWindowProc(hwnd, uMsg, wParam, lParam);
@@ -415,6 +448,9 @@ void DrawRadioInterface(HDC hdc, RECT* rect) {
 
 	// Draw signal meter
 	DrawSignalMeter(hdc, 450, 150, g_radio.signalStrength);
+	
+	// Draw VU meter
+	DrawVUMeter(hdc, 450, 180, g_audio.vuLevelLeft, g_audio.vuLevelRight);
 
 	// Draw power button
 	DrawPowerButton(hdc, 500, 120, 25, g_radio.power);
@@ -510,7 +546,11 @@ void DrawTuningDial(HDC hdc, int x, int y, int radius, float frequency) {
 	Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
 	DeleteObject(borderPen);
 
-	// Draw frequency markings
+	// Draw tick marks and frequency markings (270 degree sweep)
+	HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(60, 40, 20));
+	SelectObject(hdc, tickPen);
+
+	// Draw major tick marks and frequency labels
 	SetTextColor(hdc, RGB(0, 0, 0));
 	HFONT smallFont = CreateFont(10, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
 								DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
@@ -519,18 +559,65 @@ void DrawTuningDial(HDC hdc, int x, int y, int radius, float frequency) {
 	SelectObject(hdc, smallFont);
 	SetTextAlign(hdc, TA_CENTER);
 
+	// 270 degree sweep from -135 to +135 degrees
 	for (int i = 0; i < 12; i++) {
-		float angle = (float)i * 3.14159f / 6.0f;
-		int markX = x + (int)((radius - 15) * cos(angle));
-		int markY = y + (int)((radius - 15) * sin(angle));
+		float angle = -3.14159f * 0.75f + (float)i * (3.14159f * 1.5f) / 11.0f;
 
+		// Major tick marks
+		int tickStartX = x + (int)((radius - 8) * cos(angle));
+		int tickStartY = y + (int)((radius - 8) * sin(angle));
+		int tickEndX = x + (int)((radius - 2) * cos(angle));
+		int tickEndY = y + (int)((radius - 2) * sin(angle));
+		MoveToEx(hdc, tickStartX, tickStartY, NULL);
+		LineTo(hdc, tickEndX, tickEndY);
+
+		// Frequency labels
+		int markX = x + (int)((radius - 18) * cos(angle));
+		int markY = y + (int)((radius - 18) * sin(angle));
 		char mark[8];
 		sprintf(mark, "%d", 10 + i * 2);
 		TextOut(hdc, markX, markY - 5, mark, strlen(mark));
 	}
 
-	// Draw pointer based on frequency
-	float angle = (frequency - 10.0f) / 24.0f * 3.14159f;
+	// Draw minor tick marks between major ones
+	for (int i = 0; i < 11; i++) {
+		float angle = -3.14159f * 0.75f + ((float)i + 0.5f) * (3.14159f * 1.5f) / 11.0f;
+		int tickStartX = x + (int)((radius - 5) * cos(angle));
+		int tickStartY = y + (int)((radius - 5) * sin(angle));
+		int tickEndX = x + (int)((radius - 2) * cos(angle));
+		int tickEndY = y + (int)((radius - 2) * sin(angle));
+		MoveToEx(hdc, tickStartX, tickStartY, NULL);
+		LineTo(hdc, tickEndX, tickEndY);
+	}
+
+	// Draw range limit markers at start and end positions
+	HPEN limitPen = CreatePen(PS_SOLID, 2, RGB(255, 0, 0));
+	SelectObject(hdc, limitPen);
+
+	// Start position (-135 degrees, 10 MHz)
+	float startAngle = -3.14159f * 0.75f;
+	int startX = x + (int)((radius - 12) * cos(startAngle));
+	int startY = y + (int)((radius - 12) * sin(startAngle));
+	int startEndX = x + (int)(radius * cos(startAngle));
+	int startEndY = y + (int)(radius * sin(startAngle));
+	MoveToEx(hdc, startX, startY, NULL);
+	LineTo(hdc, startEndX, startEndY);
+
+	// End position (+135 degrees, 34 MHz)
+	float endAngle = 3.14159f * 0.75f;
+	int endX = x + (int)((radius - 12) * cos(endAngle));
+	int endY = y + (int)((radius - 12) * sin(endAngle));
+	int endEndX = x + (int)(radius * cos(endAngle));
+	int endEndY = y + (int)(radius * sin(endAngle));
+	MoveToEx(hdc, endX, endY, NULL);
+	LineTo(hdc, endEndX, endEndY);
+
+	DeleteObject(tickPen);
+	DeleteObject(limitPen);
+
+	// Draw pointer based on frequency (270 degree sweep)
+	float normalizedFreq = (frequency - 10.0f) / 24.0f;
+	float angle = -3.14159f * 0.75f + normalizedFreq * (3.14159f * 1.5f);
 	int pointerX = x + (int)((radius - 10) * cos(angle));
 	int pointerY = y + (int)((radius - 10) * sin(angle));
 
@@ -599,6 +686,67 @@ void DrawSignalMeter(HDC hdc, int x, int y, int strength) {
 	}
 }
 
+void DrawVUMeter(HDC hdc, int x, int y, float leftLevel, float rightLevel) {
+	// Draw VU meter background
+	RECT meterBg = {x, y, x + 80, y + 40};
+	HBRUSH bgBrush = CreateSolidBrush(RGB(20, 20, 20));
+	FillRect(hdc, &meterBg, bgBrush);
+	DeleteObject(bgBrush);
+
+	// Draw border
+	HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
+	SelectObject(hdc, borderPen);
+	Rectangle(hdc, meterBg.left, meterBg.top, meterBg.right, meterBg.bottom);
+	DeleteObject(borderPen);
+
+	// Draw "VU" label
+	SetTextColor(hdc, RGB(200, 200, 200));
+	SetBkMode(hdc, TRANSPARENT);
+	HFONT smallFont = CreateFont(10, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+								DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+								CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+								DEFAULT_PITCH | FF_SWISS, "Arial");
+	SelectObject(hdc, smallFont);
+	TextOut(hdc, x + 2, y + 2, "VU", 2);
+
+	// Draw left channel meter
+	int leftWidth = (int)(leftLevel * 70);
+	if (leftWidth > 0) {
+		RECT leftBar = {x + 5, y + 12, x + 5 + leftWidth, y + 18};
+		COLORREF leftColor = leftLevel > 0.8f ? RGB(255, 0, 0) : 
+							 leftLevel > 0.6f ? RGB(255, 255, 0) : RGB(0, 255, 0);
+		HBRUSH leftBrush = CreateSolidBrush(leftColor);
+		FillRect(hdc, &leftBar, leftBrush);
+		DeleteObject(leftBrush);
+	}
+
+	// Draw right channel meter
+	int rightWidth = (int)(rightLevel * 70);
+	if (rightWidth > 0) {
+		RECT rightBar = {x + 5, y + 22, x + 5 + rightWidth, y + 28};
+		COLORREF rightColor = rightLevel > 0.8f ? RGB(255, 0, 0) : 
+							  rightLevel > 0.6f ? RGB(255, 255, 0) : RGB(0, 255, 0);
+		HBRUSH rightBrush = CreateSolidBrush(rightColor);
+		FillRect(hdc, &rightBar, rightBrush);
+		DeleteObject(rightBrush);
+	}
+
+	// Draw channel labels
+	TextOut(hdc, x + 77, y + 10, "L", 1);
+	TextOut(hdc, x + 77, y + 20, "R", 1);
+
+	// Draw scale marks
+	HPEN scalePen = CreatePen(PS_SOLID, 1, RGB(80, 80, 80));
+	SelectObject(hdc, scalePen);
+	for (int i = 1; i < 10; i++) {
+		int markX = x + 5 + (i * 7);
+		MoveToEx(hdc, markX, y + 30, NULL);
+		LineTo(hdc, markX, y + 32);
+	}
+	DeleteObject(scalePen);
+	DeleteObject(smallFont);
+}
+
 void DrawPowerButton(HDC hdc, int x, int y, int radius, int power) {
 	// Draw button background
 	COLORREF buttonColor = power ? RGB(255, 0, 0) : RGB(100, 100, 100);
@@ -641,8 +789,12 @@ void UpdateFrequencyFromMouse(int mouseX, int mouseY) {
 	float angle = GetAngleFromPoint(mouseX, mouseY, 150, 200);
 
 	// Convert angle to frequency (10-34 MHz range)
-	// Normalize angle from -PI to PI to 0-1 range
-	float normalizedAngle = (angle + 3.14159f) / (2.0f * 3.14159f);
+	// Map 270 degree sweep from -135 to +135 degrees
+	float normalizedAngle = (angle + 3.14159f * 0.75f) / (3.14159f * 1.5f);
+
+	// Clamp to valid range
+	if (normalizedAngle < 0.0f) normalizedAngle = 0.0f;
+	if (normalizedAngle > 1.0f) normalizedAngle = 1.0f;
 
 	// Map to frequency range
 	g_radio.frequency = 10.0f + normalizedAngle * 24.0f;
@@ -668,6 +820,8 @@ void UpdateFrequencyFromMouse(int mouseX, int mouseY) {
 
 	if (g_radio.signalStrength < 0) g_radio.signalStrength = 0;
 	if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
+
+	UpdateStaticVolume(g_radio.signalStrength);
 }
 
 void UpdateVolumeFromMouse(int mouseX, int mouseY) {
@@ -682,16 +836,19 @@ void UpdateVolumeFromMouse(int mouseX, int mouseY) {
 	// Clamp volume
 	if (g_radio.volume < 0.0f) g_radio.volume = 0.0f;
 	if (g_radio.volume > 1.0f) g_radio.volume = 1.0f;
+
+	// Update static volume when main volume changes
+	UpdateStaticVolume(g_radio.signalStrength);
 }
 
 int InitializeAudio() {
 	// Initialize BASS with more detailed error reporting
 	printf("Initializing BASS audio system...\n");
-	
+
 	if (!BASS_Init(-1, 44100, 0, 0, NULL)) {
 		DWORD error = BASS_ErrorGetCode();
 		printf("BASS initialization failed (Error: %lu)\n", error);
-		
+
 		// Try alternative initialization methods
 		printf("Trying alternative audio device...\n");
 		if (!BASS_Init(0, 44100, 0, 0, NULL)) {
@@ -706,28 +863,30 @@ int InitializeAudio() {
 			return -1;
 		}
 	}
-	
+
 	printf("BASS initialized successfully\n");
-	
+
 	// Get BASS version info
 	DWORD version = BASS_GetVersion();
-	printf("BASS version: %d.%d.%d.%d\n", 
+	printf("BASS version: %d.%d.%d.%d\n",
 		   HIBYTE(HIWORD(version)), LOBYTE(HIWORD(version)),
 		   HIBYTE(LOWORD(version)), LOBYTE(LOWORD(version)));
-	
+
 	g_audio.currentStream = 0;
 	g_audio.staticStream = 0;
 	g_audio.isPlaying = 0;
 	g_audio.staticVolume = 0.8f;
 	g_audio.radioVolume = 0.0f;
 	g_audio.currentStation = NULL;
+	g_audio.vuLevelLeft = 0.0f;
+	g_audio.vuLevelRight = 0.0f;
 
 	return 0;
 }
 
 void CleanupAudio() {
 	StopBassStreaming();
-	
+
 	// Free BASS
 	BASS_Free();
 	printf("BASS cleaned up\n");
@@ -736,7 +895,8 @@ void CleanupAudio() {
 void StartAudio() {
 	if (!g_audio.isPlaying) {
 		g_audio.isPlaying = 1;
-		printf("Audio started\n");
+		StartStaticNoise();
+		printf("Audio started with static\n");
 	}
 }
 
@@ -744,6 +904,7 @@ void StopAudio() {
 	if (g_audio.isPlaying) {
 		g_audio.isPlaying = 0;
 		StopBassStreaming();
+		StopStaticNoise();
 		printf("Audio stopped\n");
 	}
 }
@@ -805,24 +966,24 @@ int StartBassStreaming(RadioStation* station) {
 
 	// Create BASS stream from URL with more options
 	printf("Creating BASS stream...\n");
-	g_audio.currentStream = BASS_StreamCreateURL(station->streamUrl, 0, 
+	g_audio.currentStream = BASS_StreamCreateURL(station->streamUrl, 0,
 		BASS_STREAM_BLOCK | BASS_STREAM_STATUS | BASS_STREAM_AUTOFREE, NULL, 0);
 
 	if (g_audio.currentStream) {
 		printf("Successfully connected to stream: %s\n", station->name);
-		
+
 		// Get stream info
 		BASS_CHANNELINFO info;
 		if (BASS_ChannelGetInfo(g_audio.currentStream, &info)) {
-			printf("Stream info: %lu Hz, %lu channels, type=%lu\n", 
+			printf("Stream info: %lu Hz, %lu channels, type=%lu\n",
 				   info.freq, info.chans, info.ctype);
 		}
-		
+
 		// Set volume based on signal strength and radio volume
 		float volume = g_radio.volume * (g_radio.signalStrength / 100.0f);
 		BASS_ChannelSetAttribute(g_audio.currentStream, BASS_ATTRIB_VOL, volume);
 		printf("Set volume to: %.2f\n", volume);
-		
+
 		// Start playing
 		if (BASS_ChannelPlay(g_audio.currentStream, FALSE)) {
 			printf("Stream playback started\n");
@@ -830,7 +991,7 @@ int StartBassStreaming(RadioStation* station) {
 			DWORD error = BASS_ErrorGetCode();
 			printf("Failed to start playback (BASS Error: %lu)\n", error);
 		}
-		
+
 		g_audio.currentStation = station;
 		return 1;
 	} else {
@@ -860,3 +1021,109 @@ void StopBassStreaming() {
 	g_audio.currentStation = NULL;
 }
 
+// Static noise generation callback
+DWORD CALLBACK StaticStreamProc(HSTREAM handle, void* buffer, DWORD length, void* user) {
+	short* samples = (short*)buffer;
+	DWORD sampleCount = length / sizeof(short);
+	
+	// Get current time for oscillation
+	static DWORD startTime = GetTickCount();
+	DWORD currentTime = GetTickCount();
+	float timeSeconds = (currentTime - startTime) / 1000.0f;
+	
+	// Create subtle volume oscillations (5-7% variation)
+	// Use multiple sine waves at different frequencies for natural variation
+	float oscillation1 = sin(timeSeconds * 0.7f) * 0.03f;      // 3% slow oscillation
+	float oscillation2 = sin(timeSeconds * 2.3f) * 0.02f;      // 2% medium oscillation  
+	float oscillation3 = sin(timeSeconds * 5.1f) * 0.015f;     // 1.5% fast oscillation
+	float volumeVariation = 1.0f + oscillation1 + oscillation2 + oscillation3;
+	
+	// Generate white noise with volume variation
+	for (DWORD i = 0; i < sampleCount; i++) {
+		// Generate random value between -32767 and 32767
+		short baseNoise = (short)((rand() % 65535) - 32767);
+		
+		// Apply volume variation
+		samples[i] = (short)(baseNoise * volumeVariation);
+	}
+	
+	return length;
+}
+
+void StartStaticNoise() {
+	if (!g_audio.staticStream) {
+		// Create a stream for static noise generation
+		g_audio.staticStream = BASS_StreamCreate(SAMPLE_RATE, CHANNELS, 0, StaticStreamProc, NULL);
+
+		if (g_audio.staticStream) {
+			// Set initial volume based on signal strength
+			UpdateStaticVolume(g_radio.signalStrength);
+
+			// Start playing static
+			BASS_ChannelPlay(g_audio.staticStream, FALSE);
+			printf("Static noise started\n");
+		} else {
+			printf("Failed to create static stream\n");
+		}
+	}
+}
+
+void StopStaticNoise() {
+	if (g_audio.staticStream) {
+		BASS_StreamFree(g_audio.staticStream);
+		g_audio.staticStream = 0;
+		printf("Static noise stopped\n");
+	}
+}
+
+void UpdateStaticVolume(float signalStrength) {
+	if (g_audio.staticStream) {
+		// Static volume is inverse of signal strength
+		// Strong signal = less static, weak signal = more static
+		float staticLevel = (100.0f - signalStrength) / 100.0f;
+		float volume = g_radio.volume * staticLevel * g_audio.staticVolume;
+
+		// Ensure minimum static when radio is on but no strong signal
+		if (g_radio.power && signalStrength < 50.0f) {
+			volume = fmax(volume, g_radio.volume * 0.1f);
+		}
+
+		BASS_ChannelSetAttribute(g_audio.staticStream, BASS_ATTRIB_VOL, volume);
+	}
+}
+
+void UpdateVULevels() {
+	// Initialize levels to zero
+	g_audio.vuLevelLeft = 0.0f;
+	g_audio.vuLevelRight = 0.0f;
+	
+	// Get levels from current stream if playing
+	if (g_audio.currentStream && BASS_ChannelIsActive(g_audio.currentStream) == BASS_ACTIVE_PLAYING) {
+		DWORD level = BASS_ChannelGetLevel(g_audio.currentStream);
+		if (level != -1) {
+			// Extract left and right channel levels
+			g_audio.vuLevelLeft = (float)LOWORD(level) / 32768.0f;
+			g_audio.vuLevelRight = (float)HIWORD(level) / 32768.0f;
+		}
+	}
+	
+	// Add static contribution if static is playing
+	if (g_audio.staticStream && BASS_ChannelIsActive(g_audio.staticStream) == BASS_ACTIVE_PLAYING) {
+		DWORD staticLevel = BASS_ChannelGetLevel(g_audio.staticStream);
+		if (staticLevel != -1) {
+			float staticLeft = (float)LOWORD(staticLevel) / 32768.0f;
+			float staticRight = (float)HIWORD(staticLevel) / 32768.0f;
+			
+			// Combine with existing levels (simulate mixing)
+			g_audio.vuLevelLeft = fmin(1.0f, g_audio.vuLevelLeft + staticLeft * 0.3f);
+			g_audio.vuLevelRight = fmin(1.0f, g_audio.vuLevelRight + staticRight * 0.3f);
+		}
+	}
+	
+	// Apply some smoothing/decay for more realistic VU behavior
+	static float lastLeft = 0.0f, lastRight = 0.0f;
+	g_audio.vuLevelLeft = g_audio.vuLevelLeft * 0.7f + lastLeft * 0.3f;
+	g_audio.vuLevelRight = g_audio.vuLevelRight * 0.7f + lastRight * 0.3f;
+	lastLeft = g_audio.vuLevelLeft;
+	lastRight = g_audio.vuLevelRight;
+}

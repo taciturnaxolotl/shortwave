@@ -40,7 +40,7 @@
 
               buildPhase = ''
                 export LDFLAGS="-static -static-libgcc -static-libstdc++"
-                
+
                 # Check if BASS files exist in libs directory
                 if [ -f "libs/bass.h" ] && [ -f "libs/bass.lib" ]; then
                   echo "BASS files found in libs/ - building with audio integration"
@@ -50,7 +50,7 @@
                   sed -i 's|#include "libs/bass.h"|// #include "libs/bass.h"|' main.cpp
                   sed -i 's|libs/bass.lib||' CMakeLists.txt
                 fi
-                
+
                 cmake -DCMAKE_BUILD_TYPE=Release \
                       -DCMAKE_SYSTEM_NAME=Windows \
                       -DCMAKE_C_COMPILER=$CC \
@@ -66,13 +66,16 @@
             };
 
             deploy-to-xp = pkgs.writeShellScriptBin "deploy-to-xp" ''
+              echo "rebuilding program"
+              nix build --rebuild
+
               XP_DIR="$HOME/Documents/xp-drive"
               mkdir -p "$XP_DIR"
 
               echo "Deploying Shortwave Radio to $XP_DIR..."
 
               # Copy executable with force overwrite
-              if cp -f ${self'.packages.shortwave}/bin/Shortwave.exe "$XP_DIR/"; then
+              if cp -f result/bin/Shortwave.exe "$XP_DIR/"; then
                 echo "✓ Copied Shortwave.exe"
               else
                 echo "✗ Failed to copy Shortwave.exe"
@@ -96,60 +99,6 @@
               ls -la "$XP_DIR"/*.{exe,dll} 2>/dev/null || echo "No files found"
             '';
 
-            setup-dev = pkgs.writeShellScriptBin "setup-dev" ''
-                            echo "Setting up development environment for Shortwave Radio..."
-
-                            # Get dynamic paths from nix packages
-                            GCC_BASE="${pkgs.pkgsCross.mingw32.buildPackages.gcc}/i686-w64-mingw32"
-                            SYS_INCLUDE="$GCC_BASE/sys-include"
-                            MINGW_MAIN_INCLUDE="${pkgs.pkgsCross.mingw32.windows.mingw_w64}/include"
-                            CPP_INCLUDE="${pkgs.lib.getDev pkgs.pkgsCross.mingw32.buildPackages.gcc}/include/c++/10.3.0"
-                            CPP_TARGET_INCLUDE="$CPP_INCLUDE/i686-w64-mingw32"
-
-                            # Create .clangd config with correct paths
-                            cat > .clangd << EOF
-              CompileFlags:
-                Add:
-                  - -target
-                  - i686-w64-mingw32
-                  - -DWINVER=0x0501
-                  - -D_WIN32_WINNT=0x0501
-                  - -DWIN32_LEAN_AND_MEAN
-                  - -D_WIN32
-                  - -DWIN32
-                  - -std=c++17
-                  - -fno-builtin
-                  - -isystem
-                  - $SYS_INCLUDE
-                  - -isystem
-                  - $MINGW_MAIN_INCLUDE
-                  - -isystem
-                  - $CPP_INCLUDE
-                  - -isystem
-                  - $CPP_TARGET_INCLUDE
-                Remove:
-                  - -I*/gcc/*/include
-              EOF
-
-                            # Create compile_commands.json
-                            cat > compile_commands.json << EOF
-              [
-                {
-                  "directory": "$(pwd)",
-                  "command": "i686-w64-mingw32-g++ -DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -DWIN32_LEAN_AND_MEAN -D_WIN32 -DWIN32 -std=c++17 -isystem \"$SYS_INCLUDE\" -isystem \"$MINGW_MAIN_INCLUDE\" -isystem \"$CPP_INCLUDE\" -isystem \"$CPP_TARGET_INCLUDE\" -c main.cpp",
-                  "file": "main.cpp"
-                }
-              ]
-              EOF
-
-                            echo "Generated .clangd config and compile_commands.json with include paths"
-                            echo "Development environment ready for Shortwave Radio development"
-                            echo "Include paths:"
-                            echo "  C standard library: $SYS_INCLUDE"
-                            echo "  MinGW headers: $MINGW_MAIN_INCLUDE"
-                            echo "  C++ headers: $CPP_INCLUDE"
-            '';
-
             default = self'.packages.shortwave;
           };
 
@@ -159,7 +108,6 @@
                 cmake
                 pkgsCross.mingw32.buildPackages.gcc
                 self'.packages.deploy-to-xp
-                self'.packages.setup-dev
               ];
 
               shellHook = ''
