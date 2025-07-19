@@ -50,7 +50,7 @@ typedef struct {
 
 	// Station tracking
 	RadioStation* currentStation;
-	
+
 	// VU meter levels (0.0 to 1.0)
 	float vuLevelLeft;
 	float vuLevelRight;
@@ -447,10 +447,10 @@ void DrawRadioInterface(HDC hdc, RECT* rect) {
 	DrawVolumeKnob(hdc, 350, 200, 30, g_radio.volume);
 
 	// Draw signal meter
-	DrawSignalMeter(hdc, 450, 150, g_radio.signalStrength);
-	
+	DrawSignalMeter(hdc, 450, 170, g_radio.signalStrength);
+
 	// Draw VU meter
-	DrawVUMeter(hdc, 450, 180, g_audio.vuLevelLeft, g_audio.vuLevelRight);
+	DrawVUMeter(hdc, 450, 200, g_audio.vuLevelLeft, g_audio.vuLevelRight);
 
 	// Draw power button
 	DrawPowerButton(hdc, 500, 120, 25, g_radio.power);
@@ -485,21 +485,6 @@ void DrawRadioInterface(HDC hdc, RECT* rect) {
 		DeleteObject(stationFont);
 	}
 
-	// Draw labels
-	SetBkMode(hdc, TRANSPARENT);
-	SetTextColor(hdc, RGB(255, 255, 255));
-	HFONT font = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-						   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-						   CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-						   DEFAULT_PITCH | FF_SWISS, "Arial");
-	SelectObject(hdc, font);
-
-	TextOut(hdc, 180, 300, "TUNING", 6);
-	TextOut(hdc, 330, 260, "VOLUME", 6);
-	TextOut(hdc, 430, 200, "SIGNAL", 6);
-	TextOut(hdc, 485, 160, "POWER", 5);
-
-	DeleteObject(font);
 }
 
 void DrawFrequencyDisplay(HDC hdc, int x, int y, float frequency) {
@@ -628,6 +613,18 @@ void DrawTuningDial(HDC hdc, int x, int y, int radius, float frequency) {
 	DeleteObject(pointerPen);
 
 	DeleteObject(smallFont);
+
+	// Draw label below the dial
+	SetBkMode(hdc, TRANSPARENT);
+	SetTextColor(hdc, RGB(255, 255, 255));
+	HFONT labelFont = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+							   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+							   CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+							   DEFAULT_PITCH | FF_SWISS, "Arial");
+	SelectObject(hdc, labelFont);
+	SetTextAlign(hdc, TA_CENTER);
+	TextOut(hdc, x, y + radius + 15, "TUNING", 6);
+	DeleteObject(labelFont);
 }
 
 void DrawVolumeKnob(HDC hdc, int x, int y, int radius, float volume) {
@@ -653,6 +650,18 @@ void DrawVolumeKnob(HDC hdc, int x, int y, int radius, float volume) {
 	MoveToEx(hdc, x, y, NULL);
 	LineTo(hdc, indicatorX, indicatorY);
 	DeleteObject(indicatorPen);
+
+	// Draw label below the knob
+	SetBkMode(hdc, TRANSPARENT);
+	SetTextColor(hdc, RGB(255, 255, 255));
+	HFONT labelFont = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+							   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+							   CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+							   DEFAULT_PITCH | FF_SWISS, "Arial");
+	SelectObject(hdc, labelFont);
+	SetTextAlign(hdc, TA_CENTER);
+	TextOut(hdc, x, y + radius + 15, "VOLUME", 6);
+	DeleteObject(labelFont);
 }
 
 void DrawSignalMeter(HDC hdc, int x, int y, int strength) {
@@ -684,6 +693,18 @@ void DrawSignalMeter(HDC hdc, int x, int y, int strength) {
 		FillRect(hdc, &bar, barBrush);
 		DeleteObject(barBrush);
 	}
+
+	// Draw label above the meter
+	SetBkMode(hdc, TRANSPARENT);
+	SetTextColor(hdc, RGB(255, 255, 255));
+	HFONT labelFont = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+							   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+							   CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+							   DEFAULT_PITCH | FF_SWISS, "Arial");
+	SelectObject(hdc, labelFont);
+	SetTextAlign(hdc, TA_LEFT);
+	TextOut(hdc, x, y - 18, "SIGNAL", 6);
+	DeleteObject(labelFont);
 }
 
 void DrawVUMeter(HDC hdc, int x, int y, float leftLevel, float rightLevel) {
@@ -707,13 +728,13 @@ void DrawVUMeter(HDC hdc, int x, int y, float leftLevel, float rightLevel) {
 								CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
 								DEFAULT_PITCH | FF_SWISS, "Arial");
 	SelectObject(hdc, smallFont);
-	TextOut(hdc, x + 2, y + 2, "VU", 2);
+	TextOut(hdc, x + 9, y + 2, "VU", 2);
 
 	// Draw left channel meter
 	int leftWidth = (int)(leftLevel * 70);
 	if (leftWidth > 0) {
 		RECT leftBar = {x + 5, y + 12, x + 5 + leftWidth, y + 18};
-		COLORREF leftColor = leftLevel > 0.8f ? RGB(255, 0, 0) : 
+		COLORREF leftColor = leftLevel > 0.8f ? RGB(255, 0, 0) :
 							 leftLevel > 0.6f ? RGB(255, 255, 0) : RGB(0, 255, 0);
 		HBRUSH leftBrush = CreateSolidBrush(leftColor);
 		FillRect(hdc, &leftBar, leftBrush);
@@ -724,16 +745,16 @@ void DrawVUMeter(HDC hdc, int x, int y, float leftLevel, float rightLevel) {
 	int rightWidth = (int)(rightLevel * 70);
 	if (rightWidth > 0) {
 		RECT rightBar = {x + 5, y + 22, x + 5 + rightWidth, y + 28};
-		COLORREF rightColor = rightLevel > 0.8f ? RGB(255, 0, 0) : 
+		COLORREF rightColor = rightLevel > 0.8f ? RGB(255, 0, 0) :
 							  rightLevel > 0.6f ? RGB(255, 255, 0) : RGB(0, 255, 0);
 		HBRUSH rightBrush = CreateSolidBrush(rightColor);
 		FillRect(hdc, &rightBar, rightBrush);
 		DeleteObject(rightBrush);
 	}
 
-	// Draw channel labels
-	TextOut(hdc, x + 77, y + 10, "L", 1);
-	TextOut(hdc, x + 77, y + 20, "R", 1);
+	// Draw channel labels (better positioned)
+	TextOut(hdc, x + 77, y + 12, "L", 1);
+	TextOut(hdc, x + 77, y + 22, "R", 1);
 
 	// Draw scale marks
 	HPEN scalePen = CreatePen(PS_SOLID, 1, RGB(80, 80, 80));
@@ -773,6 +794,18 @@ void DrawPowerButton(HDC hdc, int x, int y, int radius, int power) {
 
 		DeleteObject(symbolPen);
 	}
+
+	// Draw label above the button
+	SetBkMode(hdc, TRANSPARENT);
+	SetTextColor(hdc, RGB(255, 255, 255));
+	HFONT labelFont = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+							   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+							   CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+							   DEFAULT_PITCH | FF_SWISS, "Arial");
+	SelectObject(hdc, labelFont);
+	SetTextAlign(hdc, TA_CENTER);
+	TextOut(hdc, x, y - radius - 18, "POWER", 5);
+	DeleteObject(labelFont);
 }
 
 int IsPointInCircle(int px, int py, int cx, int cy, int radius) {
@@ -1025,28 +1058,28 @@ void StopBassStreaming() {
 DWORD CALLBACK StaticStreamProc(HSTREAM handle, void* buffer, DWORD length, void* user) {
 	short* samples = (short*)buffer;
 	DWORD sampleCount = length / sizeof(short);
-	
+
 	// Get current time for oscillation
 	static DWORD startTime = GetTickCount();
 	DWORD currentTime = GetTickCount();
 	float timeSeconds = (currentTime - startTime) / 1000.0f;
-	
+
 	// Create subtle volume oscillations (5-7% variation)
 	// Use multiple sine waves at different frequencies for natural variation
 	float oscillation1 = sin(timeSeconds * 0.7f) * 0.03f;      // 3% slow oscillation
-	float oscillation2 = sin(timeSeconds * 2.3f) * 0.02f;      // 2% medium oscillation  
+	float oscillation2 = sin(timeSeconds * 2.3f) * 0.02f;      // 2% medium oscillation
 	float oscillation3 = sin(timeSeconds * 5.1f) * 0.015f;     // 1.5% fast oscillation
 	float volumeVariation = 1.0f + oscillation1 + oscillation2 + oscillation3;
-	
+
 	// Generate white noise with volume variation
 	for (DWORD i = 0; i < sampleCount; i++) {
 		// Generate random value between -32767 and 32767
 		short baseNoise = (short)((rand() % 65535) - 32767);
-		
+
 		// Apply volume variation
 		samples[i] = (short)(baseNoise * volumeVariation);
 	}
-	
+
 	return length;
 }
 
@@ -1096,7 +1129,7 @@ void UpdateVULevels() {
 	// Initialize levels to zero
 	g_audio.vuLevelLeft = 0.0f;
 	g_audio.vuLevelRight = 0.0f;
-	
+
 	// Get levels from current stream if playing
 	if (g_audio.currentStream && BASS_ChannelIsActive(g_audio.currentStream) == BASS_ACTIVE_PLAYING) {
 		DWORD level = BASS_ChannelGetLevel(g_audio.currentStream);
@@ -1106,20 +1139,20 @@ void UpdateVULevels() {
 			g_audio.vuLevelRight = (float)HIWORD(level) / 32768.0f;
 		}
 	}
-	
+
 	// Add static contribution if static is playing
 	if (g_audio.staticStream && BASS_ChannelIsActive(g_audio.staticStream) == BASS_ACTIVE_PLAYING) {
 		DWORD staticLevel = BASS_ChannelGetLevel(g_audio.staticStream);
 		if (staticLevel != -1) {
 			float staticLeft = (float)LOWORD(staticLevel) / 32768.0f;
 			float staticRight = (float)HIWORD(staticLevel) / 32768.0f;
-			
+
 			// Combine with existing levels (simulate mixing)
 			g_audio.vuLevelLeft = fmin(1.0f, g_audio.vuLevelLeft + staticLeft * 0.3f);
 			g_audio.vuLevelRight = fmin(1.0f, g_audio.vuLevelRight + staticRight * 0.3f);
 		}
 	}
-	
+
 	// Apply some smoothing/decay for more realistic VU behavior
 	static float lastLeft = 0.0f, lastRight = 0.0f;
 	g_audio.vuLevelLeft = g_audio.vuLevelLeft * 0.7f + lastLeft * 0.3f;
