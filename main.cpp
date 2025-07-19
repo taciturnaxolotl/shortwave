@@ -3,8 +3,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <mmsystem.h>
+#include <wininet.h>
+#include "libs/bass.h"
 
 #pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "wininet.lib")
 
 #define ID_ABOUT 1001
 #define ID_EXIT 1002
@@ -19,16 +22,15 @@ typedef struct {
 	float frequency;
 	char name[64];
 	char description[128];
+	char streamUrl[256];
 } RadioStation;
 
 RadioStation g_stations[] = {
-	{14.230f, "BBC World Service", "International news and current affairs"},
-	{15.770f, "Radio Moscow", "Russian international broadcast"},
-	{17.895f, "Voice of America", "American international news"},
-	{21.500f, "Radio Australia", "Australian international service"},
-	{25.820f, "Radio Canada", "Canadian international broadcast"},
-	{28.400f, "Amateur Radio", "Ham radio operators"},
-	{31.100f, "Time Signal", "Atomic clock time broadcast"}
+	{14.230f, "SomaFM Groove", "Downtempo and chillout", "http://ice1.somafm.com/groovesalad-128-mp3"},
+	{15.770f, "Radio Paradise", "Eclectic music mix", "http://stream.radioparadise.com/mp3-128"},
+	{17.895f, "Jazz Radio", "Smooth jazz", "http://jazz-wr04.ice.infomaniak.ch/jazz-wr04-128.mp3"},
+	{21.500f, "Classical Music", "Classical radio", "http://stream.wqxr.org/wqxr"},
+	{31.100f, "Chillout Lounge", "Relaxing music", "http://air.radiorecord.ru:805/chil_320"}
 };
 
 #define NUM_STATIONS (sizeof(g_stations) / sizeof(RadioStation))
@@ -40,13 +42,15 @@ RadioStation g_stations[] = {
 
 // Audio state
 typedef struct {
-	HWAVEOUT hWaveOut;
-	WAVEHDR waveHeaders[NUM_BUFFERS];
-	short audioBuffers[NUM_BUFFERS][BUFFER_SIZE];
-	int currentBuffer;
+	// BASS handles
+	HSTREAM currentStream;
+	HSTREAM staticStream;
 	int isPlaying;
 	float staticVolume;
 	float radioVolume;
+	
+	// Station tracking
+	RadioStation* currentStation;
 } AudioState;
 
 // Radio state
@@ -59,7 +63,7 @@ typedef struct {
 	int isDraggingVolume;
 } RadioState;
 
-RadioState g_radio = {14.230f, 0.5f, 0, 0, 0, 0};
+RadioState g_radio = {14.230f, 0.8f, 0, 0, 0, 0};  // Increase default volume to 0.8
 AudioState g_audio = {0};
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -77,15 +81,23 @@ void UpdateVolumeFromMouse(int mouseX, int mouseY);
 // Audio functions
 int InitializeAudio();
 void CleanupAudio();
-void GenerateStaticBuffer(short* buffer, int size);
-void FillAudioBuffer(short* buffer, int size);
-void CALLBACK WaveOutProc(HWAVEOUT hwo, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2);
 void StartAudio();
 void StopAudio();
 RadioStation* FindNearestStation(float frequency);
 float GetStationSignalStrength(RadioStation* station, float currentFreq);
 
+// BASS streaming functions
+int StartBassStreaming(RadioStation* station);
+void StopBassStreaming();
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
+	// Allocate console for debugging
+	AllocConsole();
+	freopen("CONOUT$", "w", stdout);
+	freopen("CONOUT$", "w", stderr);
+	printf("Shortwave Radio Debug Console\n");
+	printf("=============================\n");
+
 	const char* CLASS_NAME = "ShortwaveRadio";
 
 	WNDCLASS wc = {};
@@ -174,7 +186,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 		case WM_LBUTTONDOWN: {
 			int mouseX = LOWORD(lParam);
 			int mouseY = HIWORD(lParam);
-			
+
 			// Check if clicking on tuning dial
 			if (IsPointInCircle(mouseX, mouseY, 150, 200, 60)) {
 				g_radio.isDraggingDial = 1;
@@ -227,6 +239,111 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 			return 0;
 		}
 
+		case WM_KEYDOWN: {
+			switch (wParam) {
+				case VK_UP: {
+					// Increase frequency by 0.1 MHz (fine tuning)
+					g_radio.frequency += 0.1f;
+					if (g_radio.frequency > 34.0f) g_radio.frequency = 34.0f;
+
+					// Update signal strength for new frequency
+					RadioStation* station = FindNearestStation(g_radio.frequency);
+					if (station) {
+						g_radio.signalStrength = (int)(GetStationSignalStrength(station, g_radio.frequency) * 100.0f);
+						if (g_radio.signalStrength > 50 && station != g_audio.currentStation) {
+							StopBassStreaming();
+							StartBassStreaming(station);
+						}
+					} else {
+						g_radio.signalStrength = 5 + (int)(15.0f * sin(g_radio.frequency));
+						StopBassStreaming();
+					}
+
+					if (g_radio.signalStrength < 0) g_radio.signalStrength = 0;
+					if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
+
+					InvalidateRect(hwnd, NULL, TRUE);
+					break;
+				}
+
+				case VK_DOWN: {
+					// Decrease frequency by 0.1 MHz (fine tuning)
+					g_radio.frequency -= 0.1f;
+					if (g_radio.frequency < 10.0f) g_radio.frequency = 10.0f;
+
+					// Update signal strength for new frequency
+					RadioStation* station = FindNearestStation(g_radio.frequency);
+					if (station) {
+						g_radio.signalStrength = (int)(GetStationSignalStrength(station, g_radio.frequency) * 100.0f);
+						if (g_radio.signalStrength > 50 && station != g_audio.currentStation) {
+							StopBassStreaming();
+							StartBassStreaming(station);
+						}
+					} else {
+						g_radio.signalStrength = 5 + (int)(15.0f * sin(g_radio.frequency));
+						StopBassStreaming();
+					}
+
+					if (g_radio.signalStrength < 0) g_radio.signalStrength = 0;
+					if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
+
+					InvalidateRect(hwnd, NULL, TRUE);
+					break;
+				}
+
+				case VK_RIGHT: {
+					// Increase frequency by 1.0 MHz (coarse tuning)
+					g_radio.frequency += 1.0f;
+					if (g_radio.frequency > 34.0f) g_radio.frequency = 34.0f;
+
+					// Update signal strength for new frequency
+					RadioStation* station = FindNearestStation(g_radio.frequency);
+					if (station) {
+						g_radio.signalStrength = (int)(GetStationSignalStrength(station, g_radio.frequency) * 100.0f);
+						if (g_radio.signalStrength > 50 && station != g_audio.currentStation) {
+							StopBassStreaming();
+							StartBassStreaming(station);
+						}
+					} else {
+						g_radio.signalStrength = 5 + (int)(15.0f * sin(g_radio.frequency));
+						StopBassStreaming();
+					}
+
+					if (g_radio.signalStrength < 0) g_radio.signalStrength = 0;
+					if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
+
+					InvalidateRect(hwnd, NULL, TRUE);
+					break;
+				}
+
+				case VK_LEFT: {
+					// Decrease frequency by 1.0 MHz (coarse tuning)
+					g_radio.frequency -= 1.0f;
+					if (g_radio.frequency < 10.0f) g_radio.frequency = 10.0f;
+
+					// Update signal strength for new frequency
+					RadioStation* station = FindNearestStation(g_radio.frequency);
+					if (station) {
+						g_radio.signalStrength = (int)(GetStationSignalStrength(station, g_radio.frequency) * 100.0f);
+						if (g_radio.signalStrength > 50 && station != g_audio.currentStation) {
+							StopBassStreaming();
+							StartBassStreaming(station);
+						}
+					} else {
+						g_radio.signalStrength = 5 + (int)(15.0f * sin(g_radio.frequency));
+						StopBassStreaming();
+					}
+
+					if (g_radio.signalStrength < 0) g_radio.signalStrength = 0;
+					if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
+
+					InvalidateRect(hwnd, NULL, TRUE);
+					break;
+				}
+			}
+			return 0;
+		}
+
 		case WM_COMMAND:
 			switch (LOWORD(wParam)) {
 				case ID_ABOUT: {
@@ -238,7 +355,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 										  "Features:\n"
 										  "- Realistic tuning interface\n"
 										  "- Internet radio streaming\n"
-										  "- Authentic static noise";
+										  "- Authentic static noise\n\n"
+										  "Controls:\n"
+										  "- Drag tuning dial to change frequency\n"
+										  "- UP/DOWN arrows: Fine tuning (0.1 MHz)\n"
+										  "- LEFT/RIGHT arrows: Coarse tuning (1.0 MHz)\n"
+										  "- Click power button to turn on/off\n"
+										  "- Drag volume knob to adjust volume";
 					MessageBox(hwnd, aboutText, "About Shortwave Radio",
 							  MB_OK | MB_ICONINFORMATION);
 					break;
@@ -268,16 +391,16 @@ void DrawRadioInterface(HDC hdc, RECT* rect) {
 	// Draw panel border (raised effect)
 	HPEN lightPen = CreatePen(PS_SOLID, 2, RGB(140, 100, 60));
 	HPEN darkPen = CreatePen(PS_SOLID, 2, RGB(40, 25, 15));
-	
+
 	SelectObject(hdc, lightPen);
 	MoveToEx(hdc, panel.left, panel.bottom, NULL);
 	LineTo(hdc, panel.left, panel.top);
 	LineTo(hdc, panel.right, panel.top);
-	
+
 	SelectObject(hdc, darkPen);
 	LineTo(hdc, panel.right, panel.bottom);
 	LineTo(hdc, panel.left, panel.bottom);
-	
+
 	DeleteObject(lightPen);
 	DeleteObject(darkPen);
 
@@ -303,26 +426,26 @@ void DrawRadioInterface(HDC hdc, RECT* rect) {
 		HBRUSH stationBrush = CreateSolidBrush(RGB(0, 0, 0));
 		FillRect(hdc, &stationRect, stationBrush);
 		DeleteObject(stationBrush);
-		
+
 		HPEN stationPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
 		SelectObject(hdc, stationPen);
 		Rectangle(hdc, stationRect.left, stationRect.top, stationRect.right, stationRect.bottom);
 		DeleteObject(stationPen);
-		
+
 		SetTextColor(hdc, RGB(0, 255, 0));
 		HFONT stationFont = CreateFont(12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
 									  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
 									  CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
 									  DEFAULT_PITCH | FF_SWISS, "Arial");
 		SelectObject(hdc, stationFont);
-		
+
 		char stationText[256];
-		sprintf(stationText, "%.3f MHz - %s: %s", 
+		sprintf(stationText, "%.3f MHz - %s: %s",
 				currentStation->frequency, currentStation->name, currentStation->description);
-		
+
 		SetTextAlign(hdc, TA_LEFT);
 		TextOut(hdc, stationRect.left + 5, stationRect.top + 5, stationText, strlen(stationText));
-		
+
 		DeleteObject(stationFont);
 	}
 
@@ -359,7 +482,7 @@ void DrawFrequencyDisplay(HDC hdc, int x, int y, float frequency) {
 	// Draw frequency text
 	char freqText[32];
 	sprintf(freqText, "%.3f MHz", frequency);
-	
+
 	SetBkMode(hdc, TRANSPARENT);
 	SetTextColor(hdc, RGB(0, 255, 0)); // Green LCD color
 	HFONT lcdFont = CreateFont(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
@@ -367,10 +490,10 @@ void DrawFrequencyDisplay(HDC hdc, int x, int y, float frequency) {
 							  CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
 							  FIXED_PITCH | FF_MODERN, "Courier New");
 	SelectObject(hdc, lcdFont);
-	
+
 	SetTextAlign(hdc, TA_CENTER);
 	TextOut(hdc, x, y - 8, freqText, strlen(freqText));
-	
+
 	DeleteObject(lcdFont);
 }
 
@@ -400,7 +523,7 @@ void DrawTuningDial(HDC hdc, int x, int y, int radius, float frequency) {
 		float angle = (float)i * 3.14159f / 6.0f;
 		int markX = x + (int)((radius - 15) * cos(angle));
 		int markY = y + (int)((radius - 15) * sin(angle));
-		
+
 		char mark[8];
 		sprintf(mark, "%d", 10 + i * 2);
 		TextOut(hdc, markX, markY - 5, mark, strlen(mark));
@@ -410,7 +533,7 @@ void DrawTuningDial(HDC hdc, int x, int y, int radius, float frequency) {
 	float angle = (frequency - 10.0f) / 24.0f * 3.14159f;
 	int pointerX = x + (int)((radius - 10) * cos(angle));
 	int pointerY = y + (int)((radius - 10) * sin(angle));
-	
+
 	HPEN pointerPen = CreatePen(PS_SOLID, 3, RGB(255, 0, 0));
 	SelectObject(hdc, pointerPen);
 	MoveToEx(hdc, x, y, NULL);
@@ -437,7 +560,7 @@ void DrawVolumeKnob(HDC hdc, int x, int y, int radius, float volume) {
 	float angle = volume * 3.14159f * 1.5f - 3.14159f * 0.75f;
 	int indicatorX = x + (int)((radius - 5) * cos(angle));
 	int indicatorY = y + (int)((radius - 5) * sin(angle));
-	
+
 	HPEN indicatorPen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
 	SelectObject(hdc, indicatorPen);
 	MoveToEx(hdc, x, y, NULL);
@@ -462,14 +585,14 @@ void DrawSignalMeter(HDC hdc, int x, int y, int strength) {
 	int barWidth = 8;
 	int numBars = strength / 10;
 	for (int i = 0; i < numBars && i < 10; i++) {
-		RECT bar = {x + 2 + i * barWidth, y + 2, 
+		RECT bar = {x + 2 + i * barWidth, y + 2,
 				   x + 2 + (i + 1) * barWidth - 1, y + 18};
-		
+
 		COLORREF barColor;
 		if (i < 3) barColor = RGB(0, 255, 0);      // Green
 		else if (i < 7) barColor = RGB(255, 255, 0); // Yellow
 		else barColor = RGB(255, 0, 0);              // Red
-		
+
 		HBRUSH barBrush = CreateSolidBrush(barColor);
 		FillRect(hdc, &bar, barBrush);
 		DeleteObject(barBrush);
@@ -494,12 +617,12 @@ void DrawPowerButton(HDC hdc, int x, int y, int radius, int power) {
 	if (power) {
 		HPEN symbolPen = CreatePen(PS_SOLID, 3, RGB(255, 255, 255));
 		SelectObject(hdc, symbolPen);
-		
+
 		// Draw power symbol (circle with line)
 		Arc(hdc, x - 8, y - 8, x + 8, y + 8, x + 6, y - 6, x - 6, y - 6);
 		MoveToEx(hdc, x, y - 10, NULL);
 		LineTo(hdc, x, y - 2);
-		
+
 		DeleteObject(symbolPen);
 	}
 }
@@ -516,178 +639,119 @@ float GetAngleFromPoint(int px, int py, int cx, int cy) {
 
 void UpdateFrequencyFromMouse(int mouseX, int mouseY) {
 	float angle = GetAngleFromPoint(mouseX, mouseY, 150, 200);
-	
+
 	// Convert angle to frequency (10-34 MHz range)
 	// Normalize angle from -PI to PI to 0-1 range
 	float normalizedAngle = (angle + 3.14159f) / (2.0f * 3.14159f);
-	
+
 	// Map to frequency range
 	g_radio.frequency = 10.0f + normalizedAngle * 24.0f;
-	
+
 	// Clamp frequency
 	if (g_radio.frequency < 10.0f) g_radio.frequency = 10.0f;
 	if (g_radio.frequency > 34.0f) g_radio.frequency = 34.0f;
-	
+
 	// Calculate signal strength based on nearest station
 	RadioStation* nearestStation = FindNearestStation(g_radio.frequency);
 	if (nearestStation) {
 		g_radio.signalStrength = (int)(GetStationSignalStrength(nearestStation, g_radio.frequency) * 100.0f);
+
+		// Start streaming if signal is strong enough and station changed
+		if (g_radio.signalStrength > 50 && nearestStation != g_audio.currentStation) {
+			StopBassStreaming();
+			StartBassStreaming(nearestStation);
+		}
 	} else {
 		g_radio.signalStrength = 5 + (int)(15.0f * sin(g_radio.frequency));
+		StopBassStreaming();
 	}
-	
+
 	if (g_radio.signalStrength < 0) g_radio.signalStrength = 0;
 	if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
 }
 
 void UpdateVolumeFromMouse(int mouseX, int mouseY) {
 	float angle = GetAngleFromPoint(mouseX, mouseY, 350, 200);
-	
+
 	// Convert angle to volume (0-1 range)
 	// Map from -135 degrees to +135 degrees
 	float normalizedAngle = (angle + 3.14159f * 0.75f) / (3.14159f * 1.5f);
-	
+
 	g_radio.volume = normalizedAngle;
-	
+
 	// Clamp volume
 	if (g_radio.volume < 0.0f) g_radio.volume = 0.0f;
 	if (g_radio.volume > 1.0f) g_radio.volume = 1.0f;
 }
 
 int InitializeAudio() {
-	WAVEFORMATEX waveFormat;
-	waveFormat.wFormatTag = WAVE_FORMAT_PCM;
-	waveFormat.nChannels = CHANNELS;
-	waveFormat.nSamplesPerSec = SAMPLE_RATE;
-	waveFormat.wBitsPerSample = BITS_PER_SAMPLE;
-	waveFormat.nBlockAlign = (waveFormat.nChannels * waveFormat.wBitsPerSample) / 8;
-	waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
-	waveFormat.cbSize = 0;
-
-	MMRESULT result = waveOutOpen(&g_audio.hWaveOut, WAVE_MAPPER, &waveFormat, 
-								 (DWORD_PTR)WaveOutProc, 0, CALLBACK_FUNCTION);
+	// Initialize BASS with more detailed error reporting
+	printf("Initializing BASS audio system...\n");
 	
-	if (result != MMSYSERR_NOERROR) {
-		return -1;
-	}
-
-	// Initialize audio buffers
-	for (int i = 0; i < NUM_BUFFERS; i++) {
-		memset(&g_audio.waveHeaders[i], 0, sizeof(WAVEHDR));
-		g_audio.waveHeaders[i].lpData = (LPSTR)g_audio.audioBuffers[i];
-		g_audio.waveHeaders[i].dwBufferLength = BUFFER_SIZE * sizeof(short);
-		g_audio.waveHeaders[i].dwFlags = 0;
+	if (!BASS_Init(-1, 44100, 0, 0, NULL)) {
+		DWORD error = BASS_ErrorGetCode();
+		printf("BASS initialization failed (Error: %lu)\n", error);
 		
-		result = waveOutPrepareHeader(g_audio.hWaveOut, &g_audio.waveHeaders[i], sizeof(WAVEHDR));
-		if (result != MMSYSERR_NOERROR) {
+		// Try alternative initialization methods
+		printf("Trying alternative audio device...\n");
+		if (!BASS_Init(0, 44100, 0, 0, NULL)) {
+			error = BASS_ErrorGetCode();
+			printf("Alternative BASS init also failed (Error: %lu)\n", error);
+			printf("BASS Error meanings:\n");
+			printf("  1 = BASS_ERROR_MEM (memory error)\n");
+			printf("  2 = BASS_ERROR_FILEOPEN (file/URL error)\n");
+			printf("  3 = BASS_ERROR_DRIVER (no audio driver)\n");
+			printf("  8 = BASS_ERROR_ALREADY (already initialized)\n");
+			printf("  14 = BASS_ERROR_DEVICE (invalid device)\n");
 			return -1;
 		}
 	}
-
-	g_audio.currentBuffer = 0;
+	
+	printf("BASS initialized successfully\n");
+	
+	// Get BASS version info
+	DWORD version = BASS_GetVersion();
+	printf("BASS version: %d.%d.%d.%d\n", 
+		   HIBYTE(HIWORD(version)), LOBYTE(HIWORD(version)),
+		   HIBYTE(LOWORD(version)), LOBYTE(LOWORD(version)));
+	
+	g_audio.currentStream = 0;
+	g_audio.staticStream = 0;
 	g_audio.isPlaying = 0;
-	g_audio.staticVolume = 0.3f;
+	g_audio.staticVolume = 0.8f;
 	g_audio.radioVolume = 0.0f;
+	g_audio.currentStation = NULL;
 
 	return 0;
 }
 
 void CleanupAudio() {
-	if (g_audio.hWaveOut) {
-		waveOutReset(g_audio.hWaveOut);
-		
-		for (int i = 0; i < NUM_BUFFERS; i++) {
-			waveOutUnprepareHeader(g_audio.hWaveOut, &g_audio.waveHeaders[i], sizeof(WAVEHDR));
-		}
-		
-		waveOutClose(g_audio.hWaveOut);
-		g_audio.hWaveOut = NULL;
-	}
-}
-
-void GenerateStaticBuffer(short* buffer, int size) {
-	for (int i = 0; i < size; i++) {
-		// Generate white noise
-		float noise = ((float)rand() / RAND_MAX) * 2.0f - 1.0f;
-		
-		// Apply volume and convert to 16-bit
-		float volume = g_audio.staticVolume * g_radio.volume;
-		buffer[i] = (short)(noise * volume * 32767.0f);
-	}
-}
-
-void FillAudioBuffer(short* buffer, int size) {
-	// Only generate audio if radio is powered on
-	if (!g_radio.power) {
-		memset(buffer, 0, size * sizeof(short));
-		return;
-	}
+	StopBassStreaming();
 	
-	// Generate static
-	GenerateStaticBuffer(buffer, size);
-	
-	// Find nearest station and mix in signal
-	RadioStation* station = FindNearestStation(g_radio.frequency);
-	if (station && g_radio.signalStrength > 20) {
-		float signalStrength = GetStationSignalStrength(station, g_radio.frequency);
-		float radioVolume = signalStrength * g_radio.volume * 0.7f;
-		
-		for (int i = 0; i < size; i++) {
-			// Generate different tones for different stations
-			float time = (float)i / SAMPLE_RATE;
-			float tone1 = sin(2.0f * 3.14159f * (station->frequency * 50.0f) * time);
-			float tone2 = sin(2.0f * 3.14159f * (station->frequency * 75.0f) * time) * 0.5f;
-			float tone = (tone1 + tone2) * 0.5f;
-			
-			// Add some modulation to simulate voice/music
-			float modulation = sin(2.0f * 3.14159f * 3.0f * time) * 0.3f + 0.7f;
-			tone *= modulation;
-			
-			// Mix tone with existing static
-			float mixed = (float)buffer[i] / 32767.0f;
-			mixed = mixed * (1.0f - radioVolume) + tone * radioVolume;
-			
-			buffer[i] = (short)(mixed * 32767.0f);
-		}
-	}
-}
-
-void CALLBACK WaveOutProc(HWAVEOUT hwo, UINT uMsg, DWORD_PTR dwInstance, 
-						 DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
-	if (uMsg == WOM_DONE && g_audio.isPlaying) {
-		WAVEHDR* waveHeader = (WAVEHDR*)dwParam1;
-		
-		// Refill the buffer
-		FillAudioBuffer((short*)waveHeader->lpData, BUFFER_SIZE);
-		
-		// Queue the buffer for playback
-		waveOutWrite(g_audio.hWaveOut, waveHeader, sizeof(WAVEHDR));
-	}
+	// Free BASS
+	BASS_Free();
+	printf("BASS cleaned up\n");
 }
 
 void StartAudio() {
 	if (!g_audio.isPlaying) {
 		g_audio.isPlaying = 1;
-		
-		// Fill and queue all buffers
-		for (int i = 0; i < NUM_BUFFERS; i++) {
-			FillAudioBuffer(g_audio.audioBuffers[i], BUFFER_SIZE);
-			waveOutWrite(g_audio.hWaveOut, &g_audio.waveHeaders[i], sizeof(WAVEHDR));
-		}
+		printf("Audio started\n");
 	}
 }
 
 void StopAudio() {
 	if (g_audio.isPlaying) {
 		g_audio.isPlaying = 0;
-		waveOutReset(g_audio.hWaveOut);
+		StopBassStreaming();
+		printf("Audio stopped\n");
 	}
 }
 
 RadioStation* FindNearestStation(float frequency) {
 	RadioStation* nearest = NULL;
 	float minDistance = 999.0f;
-	
+
 	for (int i = 0; i < NUM_STATIONS; i++) {
 		float distance = fabs(g_stations[i].frequency - frequency);
 		if (distance < minDistance) {
@@ -695,20 +759,20 @@ RadioStation* FindNearestStation(float frequency) {
 			nearest = &g_stations[i];
 		}
 	}
-	
+
 	// Only return station if we're close enough (within 0.5 MHz)
 	if (minDistance <= 0.5f) {
 		return nearest;
 	}
-	
+
 	return NULL;
 }
 
 float GetStationSignalStrength(RadioStation* station, float currentFreq) {
 	if (!station) return 0.0f;
-	
+
 	float distance = fabs(station->frequency - currentFreq);
-	
+
 	// Signal strength drops off with distance from exact frequency
 	if (distance < 0.05f) {
 		return 0.9f; // Very strong signal
@@ -719,6 +783,80 @@ float GetStationSignalStrength(RadioStation* station, float currentFreq) {
 	} else if (distance < 0.5f) {
 		return 0.2f; // Weak signal
 	}
-	
+
 	return 0.0f; // No signal
 }
+
+int StartBassStreaming(RadioStation* station) {
+	if (!station) {
+		printf("StartBassStreaming failed: no station\n");
+		return 0;
+	}
+
+	StopBassStreaming();
+
+	printf("Attempting to stream: %s at %s\n", station->name, station->streamUrl);
+
+	// Check if BASS is initialized
+	if (!BASS_GetVersion()) {
+		printf("BASS not initialized - cannot stream\n");
+		return 0;
+	}
+
+	// Create BASS stream from URL with more options
+	printf("Creating BASS stream...\n");
+	g_audio.currentStream = BASS_StreamCreateURL(station->streamUrl, 0, 
+		BASS_STREAM_BLOCK | BASS_STREAM_STATUS | BASS_STREAM_AUTOFREE, NULL, 0);
+
+	if (g_audio.currentStream) {
+		printf("Successfully connected to stream: %s\n", station->name);
+		
+		// Get stream info
+		BASS_CHANNELINFO info;
+		if (BASS_ChannelGetInfo(g_audio.currentStream, &info)) {
+			printf("Stream info: %lu Hz, %lu channels, type=%lu\n", 
+				   info.freq, info.chans, info.ctype);
+		}
+		
+		// Set volume based on signal strength and radio volume
+		float volume = g_radio.volume * (g_radio.signalStrength / 100.0f);
+		BASS_ChannelSetAttribute(g_audio.currentStream, BASS_ATTRIB_VOL, volume);
+		printf("Set volume to: %.2f\n", volume);
+		
+		// Start playing
+		if (BASS_ChannelPlay(g_audio.currentStream, FALSE)) {
+			printf("Stream playback started\n");
+		} else {
+			DWORD error = BASS_ErrorGetCode();
+			printf("Failed to start playback (BASS Error: %lu)\n", error);
+		}
+		
+		g_audio.currentStation = station;
+		return 1;
+	} else {
+		DWORD error = BASS_ErrorGetCode();
+		printf("Failed to connect to stream: %s (BASS Error: %lu)\n", station->name, error);
+		printf("BASS Error meanings:\n");
+		printf("  1 = BASS_ERROR_MEM (out of memory)\n");
+		printf("  2 = BASS_ERROR_FILEOPEN (file/URL cannot be opened)\n");
+		printf("  3 = BASS_ERROR_DRIVER (no audio driver available)\n");
+		printf("  6 = BASS_ERROR_FORMAT (unsupported format)\n");
+		printf("  7 = BASS_ERROR_POSITION (invalid position)\n");
+		printf("  14 = BASS_ERROR_DEVICE (invalid device)\n");
+		printf("  21 = BASS_ERROR_TIMEOUT (connection timeout)\n");
+		printf("  41 = BASS_ERROR_SSL (SSL/HTTPS not supported)\n");
+	}
+
+	return 0;
+}
+
+void StopBassStreaming() {
+	if (g_audio.currentStream) {
+		BASS_StreamFree(g_audio.currentStream);
+		g_audio.currentStream = 0;
+		printf("Stopped streaming\n");
+	}
+
+	g_audio.currentStation = NULL;
+}
+

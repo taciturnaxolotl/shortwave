@@ -1,5 +1,5 @@
 {
-  description = "Win32 Hello World App with About dropdown";
+  description = "Shortwave Radio Tuner - Win32 App for Windows XP";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.05";
@@ -40,6 +40,17 @@
 
               buildPhase = ''
                 export LDFLAGS="-static -static-libgcc -static-libstdc++"
+                
+                # Check if BASS files exist in libs directory
+                if [ -f "libs/bass.h" ] && [ -f "libs/bass.lib" ]; then
+                  echo "BASS files found in libs/ - building with audio integration"
+                else
+                  echo "BASS files not found in libs/ - building without audio integration"
+                  # Disable BASS in the source
+                  sed -i 's|#include "libs/bass.h"|// #include "libs/bass.h"|' main.cpp
+                  sed -i 's|libs/bass.lib||' CMakeLists.txt
+                fi
+                
                 cmake -DCMAKE_BUILD_TYPE=Release \
                       -DCMAKE_SYSTEM_NAME=Windows \
                       -DCMAKE_C_COMPILER=$CC \
@@ -50,7 +61,7 @@
 
               installPhase = ''
                 mkdir -p $out/bin
-                cp HelloWorld.exe $out/bin/
+                cp Shortwave.exe $out/bin/
               '';
             };
 
@@ -58,49 +69,35 @@
               XP_DIR="$HOME/Documents/xp-drive"
               mkdir -p "$XP_DIR"
 
-              # Handle Windows file locking by using a temporary name first
-              TEMP_NAME="HelloWorld_new.exe"
-              OLD_NAME="HelloWorld_old.exe"
-              FINAL_NAME="HelloWorld.exe"
+              echo "Deploying Shortwave Radio to $XP_DIR..."
 
-              echo "Deploying to $XP_DIR..."
+              # Copy executable with force overwrite
+              if cp -f ${self'.packages.shortwave}/bin/Shortwave.exe "$XP_DIR/"; then
+                echo "✓ Copied Shortwave.exe"
+              else
+                echo "✗ Failed to copy Shortwave.exe"
+                exit 1
+              fi
 
-              # Copy to temporary name first
-              if cp ${self'.packages.shortwave}/bin/HelloWorld.exe "$XP_DIR/$TEMP_NAME"; then
-                echo "Copied new version as $TEMP_NAME"
-
-                # If the original exists, try to rename it
-                if [ -f "$XP_DIR/$FINAL_NAME" ]; then
-                  if mv "$XP_DIR/$FINAL_NAME" "$XP_DIR/$OLD_NAME" 2>/dev/null; then
-                    echo "Backed up old version as $OLD_NAME"
-                  else
-                    echo "Warning: Could not backup old version (file may be in use)"
-                    echo "Close the application on XP and try again, or manually rename files"
-                    echo "New version is available as: $TEMP_NAME"
-                    exit 1
-                  fi
-                fi
-
-                # Move temp to final name
-                if mv "$XP_DIR/$TEMP_NAME" "$XP_DIR/$FINAL_NAME"; then
-                  echo "Deployed HelloWorld.exe successfully"
-
-                  # Clean up old backup if it exists
-                  if [ -f "$XP_DIR/$OLD_NAME" ]; then
-                    rm -f "$XP_DIR/$OLD_NAME" 2>/dev/null || echo "(Old backup file remains)"
-                  fi
+              # Copy BASS DLL from libs directory
+              if [ -f libs/bass.dll ]; then
+                if cp -f libs/bass.dll "$XP_DIR/"; then
+                  echo "✓ Copied bass.dll"
                 else
-                  echo "Failed to finalize deployment"
+                  echo "✗ Failed to copy bass.dll"
                   exit 1
                 fi
               else
-                echo "Failed to copy new version"
-                exit 1
+                echo "⚠ bass.dll not found in libs/ directory - BASS audio will not work"
               fi
+
+              echo "🎵 Shortwave Radio deployed successfully!"
+              echo "Files in XP directory:"
+              ls -la "$XP_DIR"/*.{exe,dll} 2>/dev/null || echo "No files found"
             '';
 
             setup-dev = pkgs.writeShellScriptBin "setup-dev" ''
-                            echo "Setting up development environment for Zed..."
+                            echo "Setting up development environment for Shortwave Radio..."
 
                             # Get dynamic paths from nix packages
                             GCC_BASE="${pkgs.pkgsCross.mingw32.buildPackages.gcc}/i686-w64-mingw32"
@@ -146,7 +143,7 @@
               EOF
 
                             echo "Generated .clangd config and compile_commands.json with include paths"
-                            echo "Development environment ready for Zed editor"
+                            echo "Development environment ready for Shortwave Radio development"
                             echo "Include paths:"
                             echo "  C standard library: $SYS_INCLUDE"
                             echo "  MinGW headers: $MINGW_MAIN_INCLUDE"
@@ -166,9 +163,9 @@
               ];
 
               shellHook = ''
-                                echo "Win32 development environment loaded"
+                                echo "Shortwave Radio development environment loaded"
                                 echo "Available commands:"
-                                echo "  nix build     - Build the application"
+                                echo "  nix build     - Build the Shortwave Radio application"
                                 echo "  deploy-to-xp  - Deploy to XP VM folder"
                                 echo ""
                                 echo "Setting up development environment..."
@@ -216,7 +213,7 @@
                 EOF
 
                                 echo "✓ Generated .clangd config and compile_commands.json with include paths"
-                                echo "✓ Development environment ready for Zed editor"
+                                echo "✓ Development environment ready for Shortwave Radio development"
               '';
             };
           };
