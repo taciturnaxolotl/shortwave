@@ -11,6 +11,7 @@
 
 #define ID_ABOUT 1001
 #define ID_EXIT 1002
+#define ID_TOGGLE_CONSOLE 1003
 
 // Radio control IDs
 #define ID_TUNING_DIAL 2001
@@ -66,6 +67,10 @@ typedef struct {
 	int isDraggingVolume;
 } RadioState;
 
+// Global console state
+int g_consoleVisible = 0;
+HWND g_consoleWindow = NULL;
+
 RadioState g_radio = {14.230f, 0.8f, 0, 0, 0, 0};  // Increase default volume to 0.8
 AudioState g_audio = {0};
 
@@ -104,13 +109,8 @@ void UpdateStaticVolume(float signalStrength);
 void UpdateVULevels();
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
-	// Allocate console for debugging
-	AllocConsole();
-	freopen("CONOUT$", "w", stdout);
-	freopen("CONOUT$", "w", stderr);
-	printf("Shortwave Radio Debug Console\n");
-	printf("=============================\n");
-
+	// Don't allocate console by default - will be toggled via menu
+	
 	const char* CLASS_NAME = "ShortwaveRadio";
 
 	WNDCLASS wc = {};
@@ -150,6 +150,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
 	// Radio menu
 	HMENU hRadioMenu = CreatePopupMenu();
+	AppendMenu(hRadioMenu, MF_STRING, ID_TOGGLE_CONSOLE, "&Debug Console");
+	AppendMenu(hRadioMenu, MF_SEPARATOR, 0, NULL);
 	AppendMenu(hRadioMenu, MF_STRING, ID_ABOUT, "&About");
 	AppendMenu(hRadioMenu, MF_SEPARATOR, 0, NULL);
 	AppendMenu(hRadioMenu, MF_STRING, ID_EXIT, "E&xit");
@@ -172,6 +174,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 	// Cleanup audio
 	StopAudio();
 	CleanupAudio();
+
+	// Cleanup console if it exists
+	if (g_consoleWindow) {
+		FreeConsole();
+	}
 
 	return 0;
 }
@@ -384,6 +391,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 		case WM_COMMAND:
 			switch (LOWORD(wParam)) {
+				case ID_TOGGLE_CONSOLE: {
+					if (g_consoleVisible) {
+						// Hide console
+						if (g_consoleWindow) {
+							ShowWindow(g_consoleWindow, SW_HIDE);
+						}
+						g_consoleVisible = 0;
+					} else {
+						// Show console
+						if (!g_consoleWindow) {
+							// First time - allocate console
+							AllocConsole();
+							freopen("CONOUT$", "w", stdout);
+							freopen("CONOUT$", "w", stderr);
+							g_consoleWindow = GetConsoleWindow();
+							printf("Shortwave Radio Debug Console\n");
+							printf("=============================\n");
+						} else {
+							// Console exists, just show it
+							ShowWindow(g_consoleWindow, SW_SHOW);
+						}
+						g_consoleVisible = 1;
+					}
+					break;
+				}
 				case ID_ABOUT: {
 					const char* aboutText = "Shortwave Radio Tuner\n\n"
 										  "Version: 1.0.0\n"
