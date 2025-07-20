@@ -117,7 +117,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 	wc.lpfnWndProc = WindowProc;
 	wc.hInstance = hInstance;
 	wc.lpszClassName = CLASS_NAME;
-	wc.hbrBackground = CreateSolidBrush(RGB(101, 67, 33)); // Wood grain brown
+	wc.hbrBackground = CreateSolidBrush(RGB(24, 24, 24)); // Dark Winamp-style background
 	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
 
 	RegisterClass(&wc);
@@ -410,69 +410,96 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 void DrawRadioInterface(HDC hdc, RECT* rect) {
-	// Create vintage radio background
-	HBRUSH woodBrush = CreateSolidBrush(RGB(101, 67, 33));
-	FillRect(hdc, rect, woodBrush);
-	DeleteObject(woodBrush);
+	// Winamp-style dark gradient background
+	HBRUSH darkBrush = CreateSolidBrush(RGB(24, 24, 24));
+	FillRect(hdc, rect, darkBrush);
+	DeleteObject(darkBrush);
 
-	// Draw radio panel (darker inset)
-	RECT panel = {50, 50, rect->right - 50, rect->bottom - 50};
-	HBRUSH panelBrush = CreateSolidBrush(RGB(80, 50, 25));
-	FillRect(hdc, &panel, panelBrush);
-	DeleteObject(panelBrush);
+	// Main panel with metallic gradient effect
+	RECT panel = {10, 10, rect->right - 10, rect->bottom - 10};
+	
+	// Create gradient effect by drawing multiple rectangles
+	for (int i = 0; i < 20; i++) {
+		int gray = 45 + i * 2;
+		HBRUSH gradBrush = CreateSolidBrush(RGB(gray, gray, gray));
+		RECT gradRect = {panel.left + i, panel.top + i, panel.right - i, panel.bottom - i};
+		FrameRect(hdc, &gradRect, gradBrush);
+		DeleteObject(gradBrush);
+	}
 
-	// Draw panel border (raised effect)
-	HPEN lightPen = CreatePen(PS_SOLID, 2, RGB(140, 100, 60));
-	HPEN darkPen = CreatePen(PS_SOLID, 2, RGB(40, 25, 15));
+	// Inner panel with darker metallic look
+	RECT innerPanel = {30, 30, rect->right - 30, rect->bottom - 30};
+	HBRUSH innerBrush = CreateSolidBrush(RGB(32, 32, 32));
+	FillRect(hdc, &innerPanel, innerBrush);
+	DeleteObject(innerBrush);
+
+	// Winamp-style beveled border
+	HPEN lightPen = CreatePen(PS_SOLID, 1, RGB(128, 128, 128));
+	HPEN darkPen = CreatePen(PS_SOLID, 1, RGB(16, 16, 16));
 
 	SelectObject(hdc, lightPen);
-	MoveToEx(hdc, panel.left, panel.bottom, NULL);
-	LineTo(hdc, panel.left, panel.top);
-	LineTo(hdc, panel.right, panel.top);
+	MoveToEx(hdc, innerPanel.left, innerPanel.bottom, NULL);
+	LineTo(hdc, innerPanel.left, innerPanel.top);
+	LineTo(hdc, innerPanel.right, innerPanel.top);
 
 	SelectObject(hdc, darkPen);
-	LineTo(hdc, panel.right, panel.bottom);
-	LineTo(hdc, panel.left, panel.bottom);
+	LineTo(hdc, innerPanel.right, innerPanel.bottom);
+	LineTo(hdc, innerPanel.left, innerPanel.bottom);
 
 	DeleteObject(lightPen);
 	DeleteObject(darkPen);
 
-	// Draw frequency display
+	// Draw frequency display with Winamp-style LCD
 	DrawFrequencyDisplay(hdc, 200, 80, g_radio.frequency);
 
-	// Draw tuning dial
+	// Draw tuning dial with metallic look
 	DrawTuningDial(hdc, 150, 200, 60, g_radio.frequency);
 
-	// Draw volume knob
+	// Draw volume knob with chrome effect
 	DrawVolumeKnob(hdc, 350, 200, 30, g_radio.volume);
 
-	// Draw signal meter
+	// Draw signal meter with neon bars
 	DrawSignalMeter(hdc, 450, 170, g_radio.signalStrength);
 
-	// Draw VU meter
+	// Draw VU meter with classic Winamp style
 	DrawVUMeter(hdc, 450, 200, g_audio.vuLevelLeft, g_audio.vuLevelRight);
 
-	// Draw power button
+	// Draw power button with LED glow
 	DrawPowerButton(hdc, 500, 120, 25, g_radio.power);
 
-	// Draw station info if tuned to a station
+	// Draw station info with Winamp-style ticker
 	RadioStation* currentStation = FindNearestStation(g_radio.frequency);
 	if (currentStation && g_radio.signalStrength > 30) {
-		RECT stationRect = {80, 320, 520, 360};
-		HBRUSH stationBrush = CreateSolidBrush(RGB(0, 0, 0));
-		FillRect(hdc, &stationRect, stationBrush);
-		DeleteObject(stationBrush);
+		RECT stationRect = {50, 320, 550, 360};
+		
+		// Winamp-style display background
+		HBRUSH displayBrush = CreateSolidBrush(RGB(0, 0, 0));
+		FillRect(hdc, &stationRect, displayBrush);
+		DeleteObject(displayBrush);
 
-		HPEN stationPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
-		SelectObject(hdc, stationPen);
-		Rectangle(hdc, stationRect.left, stationRect.top, stationRect.right, stationRect.bottom);
-		DeleteObject(stationPen);
+		// Beveled border
+		HPEN lightBorderPen = CreatePen(PS_SOLID, 1, RGB(64, 64, 64));
+		HPEN darkBorderPen = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
+		
+		SelectObject(hdc, darkBorderPen);
+		MoveToEx(hdc, stationRect.left, stationRect.bottom, NULL);
+		LineTo(hdc, stationRect.left, stationRect.top);
+		LineTo(hdc, stationRect.right, stationRect.top);
+		
+		SelectObject(hdc, lightBorderPen);
+		LineTo(hdc, stationRect.right, stationRect.bottom);
+		LineTo(hdc, stationRect.left, stationRect.bottom);
+		
+		DeleteObject(lightBorderPen);
+		DeleteObject(darkBorderPen);
 
+		// Winamp-style green text
 		SetTextColor(hdc, RGB(0, 255, 0));
-		HFONT stationFont = CreateFont(12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+		SetBkMode(hdc, TRANSPARENT);
+		HFONT stationFont = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
 									  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
 									  CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-									  DEFAULT_PITCH | FF_SWISS, "Arial");
+									  DEFAULT_PITCH | FF_MODERN, "Tahoma");
 		SelectObject(hdc, stationFont);
 
 		char stationText[256];
@@ -480,67 +507,108 @@ void DrawRadioInterface(HDC hdc, RECT* rect) {
 				currentStation->frequency, currentStation->name, currentStation->description);
 
 		SetTextAlign(hdc, TA_LEFT);
-		TextOut(hdc, stationRect.left + 5, stationRect.top + 5, stationText, strlen(stationText));
+		TextOut(hdc, stationRect.left + 10, stationRect.top + 12, stationText, strlen(stationText));
 
 		DeleteObject(stationFont);
 	}
-
 }
 
 void DrawFrequencyDisplay(HDC hdc, int x, int y, float frequency) {
-	// Draw display background (black LCD style)
-	RECT display = {x - 80, y - 20, x + 80, y + 20};
+	// Winamp-style LCD display with beveled edges
+	RECT display = {x - 100, y - 25, x + 100, y + 25};
+	
+	// Dark background
 	HBRUSH blackBrush = CreateSolidBrush(RGB(0, 0, 0));
 	FillRect(hdc, &display, blackBrush);
 	DeleteObject(blackBrush);
 
-	// Draw display border
-	HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
-	SelectObject(hdc, borderPen);
-	Rectangle(hdc, display.left, display.top, display.right, display.bottom);
-	DeleteObject(borderPen);
+	// Beveled border effect
+	HPEN lightPen = CreatePen(PS_SOLID, 2, RGB(96, 96, 96));
+	HPEN darkPen = CreatePen(PS_SOLID, 2, RGB(32, 32, 32));
 
-	// Draw frequency text
+	SelectObject(hdc, darkPen);
+	MoveToEx(hdc, display.left, display.bottom, NULL);
+	LineTo(hdc, display.left, display.top);
+	LineTo(hdc, display.right, display.top);
+
+	SelectObject(hdc, lightPen);
+	LineTo(hdc, display.right, display.bottom);
+	LineTo(hdc, display.left, display.bottom);
+
+	DeleteObject(lightPen);
+	DeleteObject(darkPen);
+
+	// Inner shadow
+	RECT innerDisplay = {display.left + 3, display.top + 3, display.right - 3, display.bottom - 3};
+	HPEN shadowPen = CreatePen(PS_SOLID, 1, RGB(16, 16, 16));
+	SelectObject(hdc, shadowPen);
+	Rectangle(hdc, innerDisplay.left, innerDisplay.top, innerDisplay.right, innerDisplay.bottom);
+	DeleteObject(shadowPen);
+
+	// Frequency text with glow effect
 	char freqText[32];
 	sprintf(freqText, "%.3f MHz", frequency);
 
 	SetBkMode(hdc, TRANSPARENT);
-	SetTextColor(hdc, RGB(0, 255, 0)); // Green LCD color
-	HFONT lcdFont = CreateFont(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+	
+	// Create glow effect by drawing text multiple times with slight offsets
+	HFONT lcdFont = CreateFont(20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
 							  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
 							  CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-							  FIXED_PITCH | FF_MODERN, "Courier New");
+							  FIXED_PITCH | FF_MODERN, "Consolas");
 	SelectObject(hdc, lcdFont);
-
 	SetTextAlign(hdc, TA_CENTER);
-	TextOut(hdc, x, y - 8, freqText, strlen(freqText));
+
+	// Glow effect (dark green)
+	SetTextColor(hdc, RGB(0, 128, 0));
+	for (int dx = -1; dx <= 1; dx++) {
+		for (int dy = -1; dy <= 1; dy++) {
+			if (dx != 0 || dy != 0) {
+				TextOut(hdc, x + dx, y - 10 + dy, freqText, strlen(freqText));
+			}
+		}
+	}
+
+	// Main text (bright green)
+	SetTextColor(hdc, RGB(0, 255, 0));
+	TextOut(hdc, x, y - 10, freqText, strlen(freqText));
 
 	DeleteObject(lcdFont);
 }
 
 void DrawTuningDial(HDC hdc, int x, int y, int radius, float frequency) {
-	// Draw dial background
-	HBRUSH dialBrush = CreateSolidBrush(RGB(160, 120, 80));
+	// Metallic dial with chrome gradient
+	for (int i = 0; i < 8; i++) {
+		int gray = 80 + i * 10;
+		HBRUSH gradBrush = CreateSolidBrush(RGB(gray, gray, gray));
+		SelectObject(hdc, gradBrush);
+		Ellipse(hdc, x - radius + i, y - radius + i, x + radius - i, y + radius - i);
+		DeleteObject(gradBrush);
+	}
+
+	// Inner dial surface
+	HBRUSH dialBrush = CreateSolidBrush(RGB(160, 160, 160));
 	SelectObject(hdc, dialBrush);
-	Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
+	Ellipse(hdc, x - radius + 8, y - radius + 8, x + radius - 8, y + radius - 8);
 	DeleteObject(dialBrush);
 
-	// Draw dial border
-	HPEN borderPen = CreatePen(PS_SOLID, 2, RGB(60, 40, 20));
-	SelectObject(hdc, borderPen);
+	// Outer ring
+	HPEN ringPen = CreatePen(PS_SOLID, 2, RGB(48, 48, 48));
+	SelectObject(hdc, ringPen);
 	Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
-	DeleteObject(borderPen);
+	DeleteObject(ringPen);
 
-	// Draw tick marks and frequency markings (270 degree sweep)
-	HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(60, 40, 20));
+	// Tick marks with better contrast
+	HPEN tickPen = CreatePen(PS_SOLID, 2, RGB(0, 0, 0));
 	SelectObject(hdc, tickPen);
 
 	// Draw major tick marks and frequency labels
 	SetTextColor(hdc, RGB(0, 0, 0));
-	HFONT smallFont = CreateFont(10, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+	SetBkMode(hdc, TRANSPARENT);
+	HFONT smallFont = CreateFont(9, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
 								DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
 								CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-								DEFAULT_PITCH | FF_SWISS, "Arial");
+								DEFAULT_PITCH | FF_SWISS, "Tahoma");
 	SelectObject(hdc, smallFont);
 	SetTextAlign(hdc, TA_CENTER);
 
@@ -549,78 +617,68 @@ void DrawTuningDial(HDC hdc, int x, int y, int radius, float frequency) {
 		float angle = -3.14159f * 0.75f + (float)i * (3.14159f * 1.5f) / 11.0f;
 
 		// Major tick marks
-		int tickStartX = x + (int)((radius - 8) * cos(angle));
-		int tickStartY = y + (int)((radius - 8) * sin(angle));
-		int tickEndX = x + (int)((radius - 2) * cos(angle));
-		int tickEndY = y + (int)((radius - 2) * sin(angle));
+		int tickStartX = x + (int)((radius - 12) * cos(angle));
+		int tickStartY = y + (int)((radius - 12) * sin(angle));
+		int tickEndX = x + (int)((radius - 4) * cos(angle));
+		int tickEndY = y + (int)((radius - 4) * sin(angle));
 		MoveToEx(hdc, tickStartX, tickStartY, NULL);
 		LineTo(hdc, tickEndX, tickEndY);
 
 		// Frequency labels
-		int markX = x + (int)((radius - 18) * cos(angle));
-		int markY = y + (int)((radius - 18) * sin(angle));
+		int markX = x + (int)((radius - 22) * cos(angle));
+		int markY = y + (int)((radius - 22) * sin(angle));
 		char mark[8];
 		sprintf(mark, "%d", 10 + i * 2);
-		TextOut(hdc, markX, markY - 5, mark, strlen(mark));
+		TextOut(hdc, markX, markY - 4, mark, strlen(mark));
 	}
 
-	// Draw minor tick marks between major ones
+	// Draw minor tick marks
 	for (int i = 0; i < 11; i++) {
 		float angle = -3.14159f * 0.75f + ((float)i + 0.5f) * (3.14159f * 1.5f) / 11.0f;
-		int tickStartX = x + (int)((radius - 5) * cos(angle));
-		int tickStartY = y + (int)((radius - 5) * sin(angle));
-		int tickEndX = x + (int)((radius - 2) * cos(angle));
-		int tickEndY = y + (int)((radius - 2) * sin(angle));
+		int tickStartX = x + (int)((radius - 8) * cos(angle));
+		int tickStartY = y + (int)((radius - 8) * sin(angle));
+		int tickEndX = x + (int)((radius - 4) * cos(angle));
+		int tickEndY = y + (int)((radius - 4) * sin(angle));
 		MoveToEx(hdc, tickStartX, tickStartY, NULL);
 		LineTo(hdc, tickEndX, tickEndY);
 	}
 
-	// Draw range limit markers at start and end positions
-	HPEN limitPen = CreatePen(PS_SOLID, 2, RGB(255, 0, 0));
-	SelectObject(hdc, limitPen);
-
-	// Start position (-135 degrees, 10 MHz)
-	float startAngle = -3.14159f * 0.75f;
-	int startX = x + (int)((radius - 12) * cos(startAngle));
-	int startY = y + (int)((radius - 12) * sin(startAngle));
-	int startEndX = x + (int)(radius * cos(startAngle));
-	int startEndY = y + (int)(radius * sin(startAngle));
-	MoveToEx(hdc, startX, startY, NULL);
-	LineTo(hdc, startEndX, startEndY);
-
-	// End position (+135 degrees, 34 MHz)
-	float endAngle = 3.14159f * 0.75f;
-	int endX = x + (int)((radius - 12) * cos(endAngle));
-	int endY = y + (int)((radius - 12) * sin(endAngle));
-	int endEndX = x + (int)(radius * cos(endAngle));
-	int endEndY = y + (int)(radius * sin(endAngle));
-	MoveToEx(hdc, endX, endY, NULL);
-	LineTo(hdc, endEndX, endEndY);
-
 	DeleteObject(tickPen);
-	DeleteObject(limitPen);
 
-	// Draw pointer based on frequency (270 degree sweep)
+	// Chrome-style pointer with shadow
 	float normalizedFreq = (frequency - 10.0f) / 24.0f;
 	float angle = -3.14159f * 0.75f + normalizedFreq * (3.14159f * 1.5f);
-	int pointerX = x + (int)((radius - 10) * cos(angle));
-	int pointerY = y + (int)((radius - 10) * sin(angle));
+	int pointerX = x + (int)((radius - 15) * cos(angle));
+	int pointerY = y + (int)((radius - 15) * sin(angle));
 
-	HPEN pointerPen = CreatePen(PS_SOLID, 3, RGB(255, 0, 0));
+	// Pointer shadow
+	HPEN shadowPen = CreatePen(PS_SOLID, 4, RGB(32, 32, 32));
+	SelectObject(hdc, shadowPen);
+	MoveToEx(hdc, x + 1, y + 1, NULL);
+	LineTo(hdc, pointerX + 1, pointerY + 1);
+	DeleteObject(shadowPen);
+
+	// Main pointer
+	HPEN pointerPen = CreatePen(PS_SOLID, 3, RGB(255, 64, 64));
 	SelectObject(hdc, pointerPen);
 	MoveToEx(hdc, x, y, NULL);
 	LineTo(hdc, pointerX, pointerY);
 	DeleteObject(pointerPen);
 
+	// Center dot
+	HBRUSH centerBrush = CreateSolidBrush(RGB(64, 64, 64));
+	SelectObject(hdc, centerBrush);
+	Ellipse(hdc, x - 4, y - 4, x + 4, y + 4);
+	DeleteObject(centerBrush);
+
 	DeleteObject(smallFont);
 
-	// Draw label below the dial
-	SetBkMode(hdc, TRANSPARENT);
-	SetTextColor(hdc, RGB(255, 255, 255));
-	HFONT labelFont = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+	// Label with Winamp style
+	SetTextColor(hdc, RGB(192, 192, 192));
+	HFONT labelFont = CreateFont(12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
 							   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
 							   CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-							   DEFAULT_PITCH | FF_SWISS, "Arial");
+							   DEFAULT_PITCH | FF_SWISS, "Tahoma");
 	SelectObject(hdc, labelFont);
 	SetTextAlign(hdc, TA_CENTER);
 	TextOut(hdc, x, y + radius + 15, "TUNING", 6);
@@ -628,36 +686,59 @@ void DrawTuningDial(HDC hdc, int x, int y, int radius, float frequency) {
 }
 
 void DrawVolumeKnob(HDC hdc, int x, int y, int radius, float volume) {
-	// Draw knob background
-	HBRUSH knobBrush = CreateSolidBrush(RGB(140, 100, 60));
+	// Chrome gradient knob
+	for (int i = 0; i < 6; i++) {
+		int gray = 100 + i * 15;
+		HBRUSH gradBrush = CreateSolidBrush(RGB(gray, gray, gray));
+		SelectObject(hdc, gradBrush);
+		Ellipse(hdc, x - radius + i, y - radius + i, x + radius - i, y + radius - i);
+		DeleteObject(gradBrush);
+	}
+
+	// Inner knob surface
+	HBRUSH knobBrush = CreateSolidBrush(RGB(180, 180, 180));
 	SelectObject(hdc, knobBrush);
-	Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
+	Ellipse(hdc, x - radius + 6, y - radius + 6, x + radius - 6, y + radius - 6);
 	DeleteObject(knobBrush);
 
-	// Draw knob border
-	HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(60, 40, 20));
-	SelectObject(hdc, borderPen);
+	// Outer ring
+	HPEN ringPen = CreatePen(PS_SOLID, 1, RGB(64, 64, 64));
+	SelectObject(hdc, ringPen);
 	Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
-	DeleteObject(borderPen);
+	DeleteObject(ringPen);
 
-	// Draw volume indicator
+	// Volume indicator with glow
 	float angle = volume * 3.14159f * 1.5f - 3.14159f * 0.75f;
-	int indicatorX = x + (int)((radius - 5) * cos(angle));
-	int indicatorY = y + (int)((radius - 5) * sin(angle));
+	int indicatorX = x + (int)((radius - 8) * cos(angle));
+	int indicatorY = y + (int)((radius - 8) * sin(angle));
 
+	// Indicator shadow
+	HPEN shadowPen = CreatePen(PS_SOLID, 3, RGB(32, 32, 32));
+	SelectObject(hdc, shadowPen);
+	MoveToEx(hdc, x + 1, y + 1, NULL);
+	LineTo(hdc, indicatorX + 1, indicatorY + 1);
+	DeleteObject(shadowPen);
+
+	// Main indicator
 	HPEN indicatorPen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
 	SelectObject(hdc, indicatorPen);
 	MoveToEx(hdc, x, y, NULL);
 	LineTo(hdc, indicatorX, indicatorY);
 	DeleteObject(indicatorPen);
 
-	// Draw label below the knob
+	// Center dot
+	HBRUSH centerBrush = CreateSolidBrush(RGB(64, 64, 64));
+	SelectObject(hdc, centerBrush);
+	Ellipse(hdc, x - 3, y - 3, x + 3, y + 3);
+	DeleteObject(centerBrush);
+
+	// Label
 	SetBkMode(hdc, TRANSPARENT);
-	SetTextColor(hdc, RGB(255, 255, 255));
-	HFONT labelFont = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+	SetTextColor(hdc, RGB(192, 192, 192));
+	HFONT labelFont = CreateFont(12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
 							   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
 							   CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-							   DEFAULT_PITCH | FF_SWISS, "Arial");
+							   DEFAULT_PITCH | FF_SWISS, "Tahoma");
 	SelectObject(hdc, labelFont);
 	SetTextAlign(hdc, TA_CENTER);
 	TextOut(hdc, x, y + radius + 15, "VOLUME", 6);
@@ -665,143 +746,235 @@ void DrawVolumeKnob(HDC hdc, int x, int y, int radius, float volume) {
 }
 
 void DrawSignalMeter(HDC hdc, int x, int y, int strength) {
-	// Draw meter background
+	// Winamp-style meter background with bevel
 	RECT meter = {x, y, x + 80, y + 20};
-	HBRUSH meterBrush = CreateSolidBrush(RGB(0, 0, 0));
+	
+	// Dark background
+	HBRUSH meterBrush = CreateSolidBrush(RGB(16, 16, 16));
 	FillRect(hdc, &meter, meterBrush);
 	DeleteObject(meterBrush);
 
-	// Draw meter border
-	HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
-	SelectObject(hdc, borderPen);
-	Rectangle(hdc, meter.left, meter.top, meter.right, meter.bottom);
-	DeleteObject(borderPen);
+	// Beveled border
+	HPEN lightPen = CreatePen(PS_SOLID, 1, RGB(64, 64, 64));
+	HPEN darkPen = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
 
-	// Draw signal bars
-	int barWidth = 8;
+	SelectObject(hdc, darkPen);
+	MoveToEx(hdc, meter.left, meter.bottom, NULL);
+	LineTo(hdc, meter.left, meter.top);
+	LineTo(hdc, meter.right, meter.top);
+
+	SelectObject(hdc, lightPen);
+	LineTo(hdc, meter.right, meter.bottom);
+	LineTo(hdc, meter.left, meter.bottom);
+
+	DeleteObject(lightPen);
+	DeleteObject(darkPen);
+
+	// Neon-style signal bars
+	int barWidth = 7;
 	int numBars = strength / 10;
 	for (int i = 0; i < numBars && i < 10; i++) {
-		RECT bar = {x + 2 + i * barWidth, y + 2,
-				   x + 2 + (i + 1) * barWidth - 1, y + 18};
+		RECT bar = {x + 3 + i * barWidth, y + 3,
+				   x + 3 + (i + 1) * barWidth - 1, y + 17};
 
 		COLORREF barColor;
-		if (i < 3) barColor = RGB(0, 255, 0);      // Green
-		else if (i < 7) barColor = RGB(255, 255, 0); // Yellow
-		else barColor = RGB(255, 0, 0);              // Red
+		if (i < 3) barColor = RGB(0, 255, 64);        // Bright green
+		else if (i < 7) barColor = RGB(255, 255, 0);  // Yellow
+		else barColor = RGB(255, 64, 64);             // Bright red
 
 		HBRUSH barBrush = CreateSolidBrush(barColor);
 		FillRect(hdc, &bar, barBrush);
 		DeleteObject(barBrush);
+
+		// Add glow effect
+		COLORREF glowColor;
+		if (i < 3) glowColor = RGB(0, 128, 32);
+		else if (i < 7) glowColor = RGB(128, 128, 0);
+		else glowColor = RGB(128, 32, 32);
+
+		HPEN glowPen = CreatePen(PS_SOLID, 1, glowColor);
+		SelectObject(hdc, glowPen);
+		Rectangle(hdc, bar.left - 1, bar.top - 1, bar.right + 1, bar.bottom + 1);
+		DeleteObject(glowPen);
 	}
 
-	// Draw label above the meter
+	// Label
 	SetBkMode(hdc, TRANSPARENT);
-	SetTextColor(hdc, RGB(255, 255, 255));
-	HFONT labelFont = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+	SetTextColor(hdc, RGB(192, 192, 192));
+	HFONT labelFont = CreateFont(11, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
 							   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
 							   CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-							   DEFAULT_PITCH | FF_SWISS, "Arial");
+							   DEFAULT_PITCH | FF_SWISS, "Tahoma");
 	SelectObject(hdc, labelFont);
 	SetTextAlign(hdc, TA_LEFT);
-	TextOut(hdc, x, y - 18, "SIGNAL", 6);
+	TextOut(hdc, x, y - 16, "SIGNAL", 6);
 	DeleteObject(labelFont);
 }
 
 void DrawVUMeter(HDC hdc, int x, int y, float leftLevel, float rightLevel) {
-	// Draw VU meter background
+	// Winamp-style VU meter with classic look
 	RECT meterBg = {x, y, x + 80, y + 40};
-	HBRUSH bgBrush = CreateSolidBrush(RGB(20, 20, 20));
+	
+	// Dark background
+	HBRUSH bgBrush = CreateSolidBrush(RGB(16, 16, 16));
 	FillRect(hdc, &meterBg, bgBrush);
 	DeleteObject(bgBrush);
 
-	// Draw border
-	HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
-	SelectObject(hdc, borderPen);
-	Rectangle(hdc, meterBg.left, meterBg.top, meterBg.right, meterBg.bottom);
-	DeleteObject(borderPen);
+	// Beveled border
+	HPEN lightPen = CreatePen(PS_SOLID, 1, RGB(64, 64, 64));
+	HPEN darkPen = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
 
-	// Draw "VU" label
-	SetTextColor(hdc, RGB(200, 200, 200));
+	SelectObject(hdc, darkPen);
+	MoveToEx(hdc, meterBg.left, meterBg.bottom, NULL);
+	LineTo(hdc, meterBg.left, meterBg.top);
+	LineTo(hdc, meterBg.right, meterBg.top);
+
+	SelectObject(hdc, lightPen);
+	LineTo(hdc, meterBg.right, meterBg.bottom);
+	LineTo(hdc, meterBg.left, meterBg.bottom);
+
+	DeleteObject(lightPen);
+	DeleteObject(darkPen);
+
+	// "VU" label with classic styling
+	SetTextColor(hdc, RGB(0, 255, 0));
 	SetBkMode(hdc, TRANSPARENT);
-	HFONT smallFont = CreateFont(10, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-								DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-								CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-								DEFAULT_PITCH | FF_SWISS, "Arial");
-	SelectObject(hdc, smallFont);
-	TextOut(hdc, x + 9, y + 2, "VU", 2);
+	HFONT vuFont = CreateFont(10, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+							 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+							 CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+							 DEFAULT_PITCH | FF_SWISS, "Tahoma");
+	SelectObject(hdc, vuFont);
+	TextOut(hdc, x + 5, y + 2, "VU", 2);
 
-	// Draw left channel meter
-	int leftWidth = (int)(leftLevel * 70);
+	// Left channel meter with neon effect
+	int leftWidth = (int)(leftLevel * 65);
 	if (leftWidth > 0) {
-		RECT leftBar = {x + 5, y + 12, x + 5 + leftWidth, y + 18};
-		COLORREF leftColor = leftLevel > 0.8f ? RGB(255, 0, 0) :
-							 leftLevel > 0.6f ? RGB(255, 255, 0) : RGB(0, 255, 0);
+		RECT leftBar = {x + 8, y + 12, x + 8 + leftWidth, y + 17};
+		
+		// Determine color based on level
+		COLORREF leftColor;
+		if (leftLevel > 0.8f) leftColor = RGB(255, 64, 64);      // Red
+		else if (leftLevel > 0.6f) leftColor = RGB(255, 255, 0); // Yellow
+		else leftColor = RGB(0, 255, 64);                        // Green
+
 		HBRUSH leftBrush = CreateSolidBrush(leftColor);
 		FillRect(hdc, &leftBar, leftBrush);
 		DeleteObject(leftBrush);
+
+		// Add glow effect
+		COLORREF glowColor;
+		if (leftLevel > 0.8f) glowColor = RGB(128, 32, 32);
+		else if (leftLevel > 0.6f) glowColor = RGB(128, 128, 0);
+		else glowColor = RGB(0, 128, 32);
+
+		HPEN glowPen = CreatePen(PS_SOLID, 1, glowColor);
+		SelectObject(hdc, glowPen);
+		Rectangle(hdc, leftBar.left - 1, leftBar.top - 1, leftBar.right + 1, leftBar.bottom + 1);
+		DeleteObject(glowPen);
 	}
 
-	// Draw right channel meter
-	int rightWidth = (int)(rightLevel * 70);
+	// Right channel meter with neon effect
+	int rightWidth = (int)(rightLevel * 65);
 	if (rightWidth > 0) {
-		RECT rightBar = {x + 5, y + 22, x + 5 + rightWidth, y + 28};
-		COLORREF rightColor = rightLevel > 0.8f ? RGB(255, 0, 0) :
-							  rightLevel > 0.6f ? RGB(255, 255, 0) : RGB(0, 255, 0);
+		RECT rightBar = {x + 8, y + 22, x + 8 + rightWidth, y + 27};
+		
+		// Determine color based on level
+		COLORREF rightColor;
+		if (rightLevel > 0.8f) rightColor = RGB(255, 64, 64);     // Red
+		else if (rightLevel > 0.6f) rightColor = RGB(255, 255, 0); // Yellow
+		else rightColor = RGB(0, 255, 64);                         // Green
+
 		HBRUSH rightBrush = CreateSolidBrush(rightColor);
 		FillRect(hdc, &rightBar, rightBrush);
 		DeleteObject(rightBrush);
+
+		// Add glow effect
+		COLORREF glowColor;
+		if (rightLevel > 0.8f) glowColor = RGB(128, 32, 32);
+		else if (rightLevel > 0.6f) glowColor = RGB(128, 128, 0);
+		else glowColor = RGB(0, 128, 32);
+
+		HPEN glowPen = CreatePen(PS_SOLID, 1, glowColor);
+		SelectObject(hdc, glowPen);
+		Rectangle(hdc, rightBar.left - 1, rightBar.top - 1, rightBar.right + 1, rightBar.bottom + 1);
+		DeleteObject(glowPen);
 	}
 
-	// Draw channel labels (better positioned)
-	TextOut(hdc, x + 77, y + 12, "L", 1);
-	TextOut(hdc, x + 77, y + 22, "R", 1);
+	// Channel labels
+	SetTextColor(hdc, RGB(192, 192, 192));
+	TextOut(hdc, x + 75, y + 12, "L", 1);
+	TextOut(hdc, x + 75, y + 22, "R", 1);
 
-	// Draw scale marks
-	HPEN scalePen = CreatePen(PS_SOLID, 1, RGB(80, 80, 80));
+	// Scale marks
+	HPEN scalePen = CreatePen(PS_SOLID, 1, RGB(64, 64, 64));
 	SelectObject(hdc, scalePen);
 	for (int i = 1; i < 10; i++) {
-		int markX = x + 5 + (i * 7);
+		int markX = x + 8 + (i * 7);
 		MoveToEx(hdc, markX, y + 30, NULL);
 		LineTo(hdc, markX, y + 32);
 	}
 	DeleteObject(scalePen);
-	DeleteObject(smallFont);
+	DeleteObject(vuFont);
 }
 
 void DrawPowerButton(HDC hdc, int x, int y, int radius, int power) {
-	// Draw button background
-	COLORREF buttonColor = power ? RGB(255, 0, 0) : RGB(100, 100, 100);
-	HBRUSH buttonBrush = CreateSolidBrush(buttonColor);
-	SelectObject(hdc, buttonBrush);
-	Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
-	DeleteObject(buttonBrush);
+	// Chrome gradient button
+	for (int i = 0; i < 6; i++) {
+		int intensity = power ? (80 + i * 20) : (60 + i * 10);
+		COLORREF buttonColor = power ? RGB(255 - i * 20, intensity, intensity) : RGB(intensity, intensity, intensity);
+		HBRUSH buttonBrush = CreateSolidBrush(buttonColor);
+		SelectObject(hdc, buttonBrush);
+		Ellipse(hdc, x - radius + i, y - radius + i, x + radius - i, y + radius - i);
+		DeleteObject(buttonBrush);
+	}
 
-	// Draw button border
-	HPEN borderPen = CreatePen(PS_SOLID, 2, RGB(60, 60, 60));
+	// Inner button surface
+	COLORREF innerColor = power ? RGB(255, 128, 128) : RGB(128, 128, 128);
+	HBRUSH innerBrush = CreateSolidBrush(innerColor);
+	SelectObject(hdc, innerBrush);
+	Ellipse(hdc, x - radius + 6, y - radius + 6, x + radius - 6, y + radius - 6);
+	DeleteObject(innerBrush);
+
+	// Button border
+	HPEN borderPen = CreatePen(PS_SOLID, 2, RGB(32, 32, 32));
 	SelectObject(hdc, borderPen);
 	Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
 	DeleteObject(borderPen);
 
-	// Draw power symbol
+	// Power symbol with glow effect
 	if (power) {
+		// Glow effect
+		HPEN glowPen = CreatePen(PS_SOLID, 5, RGB(255, 64, 64));
+		SelectObject(hdc, glowPen);
+		Arc(hdc, x - 10, y - 10, x + 10, y + 10, x + 8, y - 8, x - 8, y - 8);
+		MoveToEx(hdc, x, y - 12, NULL);
+		LineTo(hdc, x, y - 4);
+		DeleteObject(glowPen);
+
+		// Main symbol
 		HPEN symbolPen = CreatePen(PS_SOLID, 3, RGB(255, 255, 255));
 		SelectObject(hdc, symbolPen);
-
-		// Draw power symbol (circle with line)
 		Arc(hdc, x - 8, y - 8, x + 8, y + 8, x + 6, y - 6, x - 6, y - 6);
 		MoveToEx(hdc, x, y - 10, NULL);
 		LineTo(hdc, x, y - 2);
-
+		DeleteObject(symbolPen);
+	} else {
+		// Dim power symbol
+		HPEN symbolPen = CreatePen(PS_SOLID, 2, RGB(64, 64, 64));
+		SelectObject(hdc, symbolPen);
+		Arc(hdc, x - 8, y - 8, x + 8, y + 8, x + 6, y - 6, x - 6, y - 6);
+		MoveToEx(hdc, x, y - 10, NULL);
+		LineTo(hdc, x, y - 2);
 		DeleteObject(symbolPen);
 	}
 
-	// Draw label above the button
+	// Label
 	SetBkMode(hdc, TRANSPARENT);
-	SetTextColor(hdc, RGB(255, 255, 255));
-	HFONT labelFont = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+	SetTextColor(hdc, power ? RGB(255, 192, 192) : RGB(192, 192, 192));
+	HFONT labelFont = CreateFont(12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
 							   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
 							   CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-							   DEFAULT_PITCH | FF_SWISS, "Arial");
+							   DEFAULT_PITCH | FF_SWISS, "Tahoma");
 	SelectObject(hdc, labelFont);
 	SetTextAlign(hdc, TA_CENTER);
 	TextOut(hdc, x, y - radius - 18, "POWER", 5);
