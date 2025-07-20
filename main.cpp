@@ -104,6 +104,7 @@ DWORD CALLBACK StaticStreamProc(HSTREAM handle, void* buffer, DWORD length, void
 void StartStaticNoise();
 void StopStaticNoise();
 void UpdateStaticVolume(float signalStrength);
+void UpdateStreamVolume();
 
 // VU meter functions
 void UpdateVULevels();
@@ -304,6 +305,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 					if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
 
 					UpdateStaticVolume(g_radio.signalStrength);
+					UpdateStreamVolume();
 					InvalidateRect(hwnd, NULL, TRUE);
 					break;
 				}
@@ -330,6 +332,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 					if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
 
 					UpdateStaticVolume(g_radio.signalStrength);
+					UpdateStreamVolume();
 					InvalidateRect(hwnd, NULL, TRUE);
 					break;
 				}
@@ -356,6 +359,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 					if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
 
 					UpdateStaticVolume(g_radio.signalStrength);
+					UpdateStreamVolume();
 					InvalidateRect(hwnd, NULL, TRUE);
 					break;
 				}
@@ -382,6 +386,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 					if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
 
 					UpdateStaticVolume(g_radio.signalStrength);
+					UpdateStreamVolume();
 					InvalidateRect(hwnd, NULL, TRUE);
 					break;
 				}
@@ -1052,6 +1057,7 @@ void UpdateFrequencyFromMouse(int mouseX, int mouseY) {
 	if (g_radio.signalStrength > 100) g_radio.signalStrength = 100;
 
 	UpdateStaticVolume(g_radio.signalStrength);
+	UpdateStreamVolume();
 }
 
 void UpdateVolumeFromMouse(int mouseX, int mouseY) {
@@ -1067,8 +1073,9 @@ void UpdateVolumeFromMouse(int mouseX, int mouseY) {
 	if (g_radio.volume < 0.0f) g_radio.volume = 0.0f;
 	if (g_radio.volume > 1.0f) g_radio.volume = 1.0f;
 
-	// Update static volume when main volume changes
+	// Update volumes when main volume changes
 	UpdateStaticVolume(g_radio.signalStrength);
+	UpdateStreamVolume();
 }
 
 int InitializeAudio() {
@@ -1322,6 +1329,17 @@ void UpdateStaticVolume(float signalStrength) {
 	}
 }
 
+void UpdateStreamVolume() {
+	if (g_audio.currentStream) {
+		// Stream volume based on signal strength and radio volume
+		float volume = g_radio.volume * (g_radio.signalStrength / 100.0f);
+		BASS_ChannelSetAttribute(g_audio.currentStream, BASS_ATTRIB_VOL, volume);
+		if (g_consoleVisible) {
+			printf("Updated stream volume to: %.2f\n", volume);
+		}
+	}
+}
+
 void UpdateVULevels() {
 	// Initialize levels to zero
 	g_audio.vuLevelLeft = 0.0f;
@@ -1331,9 +1349,14 @@ void UpdateVULevels() {
 	if (g_audio.currentStream && BASS_ChannelIsActive(g_audio.currentStream) == BASS_ACTIVE_PLAYING) {
 		DWORD level = BASS_ChannelGetLevel(g_audio.currentStream);
 		if (level != -1) {
-			// Extract left and right channel levels
-			g_audio.vuLevelLeft = (float)LOWORD(level) / 32768.0f;
-			g_audio.vuLevelRight = (float)HIWORD(level) / 32768.0f;
+			// Extract left and right channel levels and apply volume scaling
+			float rawLeft = (float)LOWORD(level) / 32768.0f;
+			float rawRight = (float)HIWORD(level) / 32768.0f;
+			
+			// Apply the same volume scaling as the actual audio output
+			float streamVolume = g_radio.volume * (g_radio.signalStrength / 100.0f);
+			g_audio.vuLevelLeft = rawLeft * streamVolume;
+			g_audio.vuLevelRight = rawRight * streamVolume;
 		}
 	}
 
@@ -1344,9 +1367,18 @@ void UpdateVULevels() {
 			float staticLeft = (float)LOWORD(staticLevel) / 32768.0f;
 			float staticRight = (float)HIWORD(staticLevel) / 32768.0f;
 
+			// Apply static volume scaling
+			float staticVolume = (100.0f - g_radio.signalStrength) / 100.0f;
+			float scaledStaticVolume = g_radio.volume * staticVolume * g_audio.staticVolume;
+			
+			// Ensure minimum static when radio is on but no strong signal
+			if (g_radio.power && g_radio.signalStrength < 50.0f) {
+				scaledStaticVolume = fmax(scaledStaticVolume, g_radio.volume * 0.1f);
+			}
+
 			// Combine with existing levels (simulate mixing)
-			g_audio.vuLevelLeft = fmin(1.0f, g_audio.vuLevelLeft + staticLeft * 0.3f);
-			g_audio.vuLevelRight = fmin(1.0f, g_audio.vuLevelRight + staticRight * 0.3f);
+			g_audio.vuLevelLeft = fmin(1.0f, g_audio.vuLevelLeft + staticLeft * scaledStaticVolume * 0.3f);
+			g_audio.vuLevelRight = fmin(1.0f, g_audio.vuLevelRight + staticRight * scaledStaticVolume * 0.3f);
 		}
 	}
 
