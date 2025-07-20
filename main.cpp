@@ -193,12 +193,25 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 			RECT rect;
 			GetClientRect(hwnd, &rect);
 
+			// Create double buffer to eliminate flicker
+			HDC memDC = CreateCompatibleDC(hdc);
+			HBITMAP memBitmap = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
+			HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
+
 			// Update VU levels before drawing
 			if (g_radio.power) {
 				UpdateVULevels();
 			}
 
-			DrawRadioInterface(hdc, &rect);
+			DrawRadioInterface(memDC, &rect);
+
+			// Copy from memory DC to screen
+			BitBlt(hdc, 0, 0, rect.right, rect.bottom, memDC, 0, 0, SRCCOPY);
+
+			// Cleanup
+			SelectObject(memDC, oldBitmap);
+			DeleteObject(memBitmap);
+			DeleteDC(memDC);
 
 			EndPaint(hwnd, &ps);
 			return 0;
@@ -398,9 +411,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 			return 0;
 
 		case WM_TIMER: {
-			// Timer for VU meter updates
+			// Timer for VU meter updates - only invalidate VU meter area
 			if (g_radio.power) {
-				InvalidateRect(hwnd, NULL, FALSE);
+				RECT vuRect = {440, 190, 540, 250};
+				InvalidateRect(hwnd, &vuRect, FALSE);
 			}
 			return 0;
 		}
@@ -415,12 +429,12 @@ void DrawRadioInterface(HDC hdc, RECT* rect) {
 	FillRect(hdc, rect, darkBrush);
 	DeleteObject(darkBrush);
 
-	// Main panel with metallic gradient effect
+	// Main panel with simplified metallic gradient effect
 	RECT panel = {10, 10, rect->right - 10, rect->bottom - 10};
 	
-	// Create gradient effect by drawing multiple rectangles
-	for (int i = 0; i < 20; i++) {
-		int gray = 45 + i * 2;
+	// Simplified gradient effect with fewer steps
+	for (int i = 0; i < 8; i++) {
+		int gray = 45 + i * 3;
 		HBRUSH gradBrush = CreateSolidBrush(RGB(gray, gray, gray));
 		RECT gradRect = {panel.left + i, panel.top + i, panel.right - i, panel.bottom - i};
 		FrameRect(hdc, &gradRect, gradBrush);
@@ -577,12 +591,12 @@ void DrawFrequencyDisplay(HDC hdc, int x, int y, float frequency) {
 }
 
 void DrawTuningDial(HDC hdc, int x, int y, int radius, float frequency) {
-	// Metallic dial with chrome gradient
-	for (int i = 0; i < 8; i++) {
-		int gray = 80 + i * 10;
+	// Simplified metallic dial with fewer gradient steps
+	for (int i = 0; i < 4; i++) {
+		int gray = 80 + i * 20;
 		HBRUSH gradBrush = CreateSolidBrush(RGB(gray, gray, gray));
 		SelectObject(hdc, gradBrush);
-		Ellipse(hdc, x - radius + i, y - radius + i, x + radius - i, y + radius - i);
+		Ellipse(hdc, x - radius + i*2, y - radius + i*2, x + radius - i*2, y + radius - i*2);
 		DeleteObject(gradBrush);
 	}
 
@@ -645,18 +659,11 @@ void DrawTuningDial(HDC hdc, int x, int y, int radius, float frequency) {
 
 	DeleteObject(tickPen);
 
-	// Chrome-style pointer with shadow
+	// Simplified pointer
 	float normalizedFreq = (frequency - 10.0f) / 24.0f;
 	float angle = -3.14159f * 0.75f + normalizedFreq * (3.14159f * 1.5f);
 	int pointerX = x + (int)((radius - 15) * cos(angle));
 	int pointerY = y + (int)((radius - 15) * sin(angle));
-
-	// Pointer shadow
-	HPEN shadowPen = CreatePen(PS_SOLID, 4, RGB(32, 32, 32));
-	SelectObject(hdc, shadowPen);
-	MoveToEx(hdc, x + 1, y + 1, NULL);
-	LineTo(hdc, pointerX + 1, pointerY + 1);
-	DeleteObject(shadowPen);
 
 	// Main pointer
 	HPEN pointerPen = CreatePen(PS_SOLID, 3, RGB(255, 64, 64));
@@ -686,12 +693,12 @@ void DrawTuningDial(HDC hdc, int x, int y, int radius, float frequency) {
 }
 
 void DrawVolumeKnob(HDC hdc, int x, int y, int radius, float volume) {
-	// Chrome gradient knob
-	for (int i = 0; i < 6; i++) {
-		int gray = 100 + i * 15;
+	// Simplified chrome gradient knob
+	for (int i = 0; i < 3; i++) {
+		int gray = 100 + i * 30;
 		HBRUSH gradBrush = CreateSolidBrush(RGB(gray, gray, gray));
 		SelectObject(hdc, gradBrush);
-		Ellipse(hdc, x - radius + i, y - radius + i, x + radius - i, y + radius - i);
+		Ellipse(hdc, x - radius + i*2, y - radius + i*2, x + radius - i*2, y + radius - i*2);
 		DeleteObject(gradBrush);
 	}
 
@@ -707,17 +714,10 @@ void DrawVolumeKnob(HDC hdc, int x, int y, int radius, float volume) {
 	Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
 	DeleteObject(ringPen);
 
-	// Volume indicator with glow
+	// Volume indicator
 	float angle = volume * 3.14159f * 1.5f - 3.14159f * 0.75f;
 	int indicatorX = x + (int)((radius - 8) * cos(angle));
 	int indicatorY = y + (int)((radius - 8) * sin(angle));
-
-	// Indicator shadow
-	HPEN shadowPen = CreatePen(PS_SOLID, 3, RGB(32, 32, 32));
-	SelectObject(hdc, shadowPen);
-	MoveToEx(hdc, x + 1, y + 1, NULL);
-	LineTo(hdc, indicatorX + 1, indicatorY + 1);
-	DeleteObject(shadowPen);
 
 	// Main indicator
 	HPEN indicatorPen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
@@ -918,13 +918,13 @@ void DrawVUMeter(HDC hdc, int x, int y, float leftLevel, float rightLevel) {
 }
 
 void DrawPowerButton(HDC hdc, int x, int y, int radius, int power) {
-	// Chrome gradient button
-	for (int i = 0; i < 6; i++) {
-		int intensity = power ? (80 + i * 20) : (60 + i * 10);
-		COLORREF buttonColor = power ? RGB(255 - i * 20, intensity, intensity) : RGB(intensity, intensity, intensity);
+	// Simplified chrome gradient button
+	for (int i = 0; i < 3; i++) {
+		int intensity = power ? (80 + i * 40) : (60 + i * 20);
+		COLORREF buttonColor = power ? RGB(255 - i * 40, intensity, intensity) : RGB(intensity, intensity, intensity);
 		HBRUSH buttonBrush = CreateSolidBrush(buttonColor);
 		SelectObject(hdc, buttonBrush);
-		Ellipse(hdc, x - radius + i, y - radius + i, x + radius - i, y + radius - i);
+		Ellipse(hdc, x - radius + i*2, y - radius + i*2, x + radius - i*2, y + radius - i*2);
 		DeleteObject(buttonBrush);
 	}
 
@@ -941,16 +941,8 @@ void DrawPowerButton(HDC hdc, int x, int y, int radius, int power) {
 	Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
 	DeleteObject(borderPen);
 
-	// Power symbol with glow effect
+	// Power symbol
 	if (power) {
-		// Glow effect
-		HPEN glowPen = CreatePen(PS_SOLID, 5, RGB(255, 64, 64));
-		SelectObject(hdc, glowPen);
-		Arc(hdc, x - 10, y - 10, x + 10, y + 10, x + 8, y - 8, x - 8, y - 8);
-		MoveToEx(hdc, x, y - 12, NULL);
-		LineTo(hdc, x, y - 4);
-		DeleteObject(glowPen);
-
 		// Main symbol
 		HPEN symbolPen = CreatePen(PS_SOLID, 3, RGB(255, 255, 255));
 		SelectObject(hdc, symbolPen);
