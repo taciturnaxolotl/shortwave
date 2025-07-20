@@ -27,10 +27,18 @@ typedef struct {
 } RadioStation;
 
 RadioStation g_stations[] = {
-	{14.230f, "SomaFM Groove", "Downtempo and chillout", "http://ice1.somafm.com/groovesalad-128-mp3"},
-	{15.770f, "Radio Paradise", "Eclectic music mix", "http://stream.radioparadise.com/mp3-128"},
-	{17.895f, "Jazz Radio", "Smooth jazz", "http://jazz-wr04.ice.infomaniak.ch/jazz-wr04-128.mp3"},
-	{21.500f, "Classical Music", "Classical radio", "http://stream.wqxr.org/wqxr"},
+	{10.230f, "SomaFM Groove", "Downtempo and chillout", "http://ice1.somafm.com/groovesalad-128-mp3"},
+	{11.470f, "WBGO Jazz88", "Jazz from Newark", "http://wbgo.streamguys.net/wbgo128"},
+	{12.650f, "Radio Paradise", "Eclectic music mix", "http://stream.radioparadise.com/mp3-128"},
+	{13.890f, "Classical Music", "Classical radio", "http://stream.wqxr.org/wqxr"},
+	{15.120f, "Jazz Radio", "Smooth jazz", "http://jazz-wr04.ice.infomaniak.ch/jazz-wr04-128.mp3"},
+	{16.350f, "FIP", "Eclectic French radio", "http://direct.fipradio.fr/live/fip-midfi.mp3"},
+	{18.810f, "TSF Jazz", "French jazz radio", "http://tsfjazz.ice.infomaniak.ch/tsfjazz-high.mp3"},
+	{20.040f, "Dublab", "Electronic and experimental", "http://dublab.out.airtime.pro:8000/dublab_a"},
+	{21.270f, "BBC World Service", "Global news and culture", "http://stream.live.vc.bbcmedia.co.uk/bbc_world_service"},
+	{23.730f, "WFMU", "Freeform experimental radio", "http://stream0.wfmu.org/freeform-128k"},
+	{24.960f, "ChillHop Music", "Lo-fi hip hop", "http://ice1.somafm.com/fluid"},
+	{27.420f, "Worldwide FM", "Global music discovery", "http://worldwidefm.out.airtime.pro:8000/worldwidefm_a"},
 };
 
 #define NUM_STATIONS (sizeof(g_stations) / sizeof(RadioStation))
@@ -111,7 +119,7 @@ void UpdateVULevels();
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 	// Don't allocate console by default - will be toggled via menu
-	
+
 	const char* CLASS_NAME = "ShortwaveRadio";
 
 	WNDCLASS wc = {};
@@ -468,7 +476,7 @@ void DrawRadioInterface(HDC hdc, RECT* rect) {
 
 	// Main panel with simplified metallic gradient effect
 	RECT panel = {10, 10, rect->right - 10, rect->bottom - 10};
-	
+
 	// Simplified gradient effect with fewer steps
 	for (int i = 0; i < 8; i++) {
 		int gray = 45 + i * 3;
@@ -522,7 +530,7 @@ void DrawRadioInterface(HDC hdc, RECT* rect) {
 	RadioStation* currentStation = FindNearestStation(g_radio.frequency);
 	if (currentStation && g_radio.signalStrength > 30) {
 		RECT stationRect = {50, 320, 550, 360};
-		
+
 		// Winamp-style display background
 		HBRUSH displayBrush = CreateSolidBrush(RGB(0, 0, 0));
 		FillRect(hdc, &stationRect, displayBrush);
@@ -531,16 +539,16 @@ void DrawRadioInterface(HDC hdc, RECT* rect) {
 		// Beveled border
 		HPEN lightBorderPen = CreatePen(PS_SOLID, 1, RGB(64, 64, 64));
 		HPEN darkBorderPen = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
-		
+
 		SelectObject(hdc, darkBorderPen);
 		MoveToEx(hdc, stationRect.left, stationRect.bottom, NULL);
 		LineTo(hdc, stationRect.left, stationRect.top);
 		LineTo(hdc, stationRect.right, stationRect.top);
-		
+
 		SelectObject(hdc, lightBorderPen);
 		LineTo(hdc, stationRect.right, stationRect.bottom);
 		LineTo(hdc, stationRect.left, stationRect.bottom);
-		
+
 		DeleteObject(lightBorderPen);
 		DeleteObject(darkBorderPen);
 
@@ -567,7 +575,7 @@ void DrawRadioInterface(HDC hdc, RECT* rect) {
 void DrawFrequencyDisplay(HDC hdc, int x, int y, float frequency) {
 	// Winamp-style LCD display with beveled edges
 	RECT display = {x - 100, y - 25, x + 100, y + 25};
-	
+
 	// Dark background
 	HBRUSH blackBrush = CreateSolidBrush(RGB(0, 0, 0));
 	FillRect(hdc, &display, blackBrush);
@@ -601,7 +609,7 @@ void DrawFrequencyDisplay(HDC hdc, int x, int y, float frequency) {
 	sprintf(freqText, "%.3f MHz", frequency);
 
 	SetBkMode(hdc, TRANSPARENT);
-	
+
 	// Create glow effect by drawing text multiple times with slight offsets
 	HFONT lcdFont = CreateFont(20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
 							  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
@@ -785,7 +793,7 @@ void DrawVolumeKnob(HDC hdc, int x, int y, int radius, float volume) {
 void DrawSignalMeter(HDC hdc, int x, int y, int strength) {
 	// Winamp-style meter background with bevel
 	RECT meter = {x, y, x + 80, y + 20};
-	
+
 	// Dark background
 	HBRUSH meterBrush = CreateSolidBrush(RGB(16, 16, 16));
 	FillRect(hdc, &meter, meterBrush);
@@ -851,7 +859,7 @@ void DrawSignalMeter(HDC hdc, int x, int y, int strength) {
 void DrawVUMeter(HDC hdc, int x, int y, float leftLevel, float rightLevel) {
 	// Winamp-style VU meter with classic look
 	RECT meterBg = {x, y, x + 80, y + 40};
-	
+
 	// Dark background
 	HBRUSH bgBrush = CreateSolidBrush(RGB(16, 16, 16));
 	FillRect(hdc, &meterBg, bgBrush);
@@ -887,7 +895,7 @@ void DrawVUMeter(HDC hdc, int x, int y, float leftLevel, float rightLevel) {
 	int leftWidth = (int)(leftLevel * 65);
 	if (leftWidth > 0) {
 		RECT leftBar = {x + 8, y + 12, x + 8 + leftWidth, y + 17};
-		
+
 		// Determine color based on level
 		COLORREF leftColor;
 		if (leftLevel > 0.8f) leftColor = RGB(255, 64, 64);      // Red
@@ -914,7 +922,7 @@ void DrawVUMeter(HDC hdc, int x, int y, float leftLevel, float rightLevel) {
 	int rightWidth = (int)(rightLevel * 65);
 	if (rightWidth > 0) {
 		RECT rightBar = {x + 8, y + 22, x + 8 + rightWidth, y + 27};
-		
+
 		// Determine color based on level
 		COLORREF rightColor;
 		if (rightLevel > 0.8f) rightColor = RGB(255, 64, 64);     // Red
@@ -1352,7 +1360,7 @@ void UpdateVULevels() {
 			// Extract left and right channel levels and apply volume scaling
 			float rawLeft = (float)LOWORD(level) / 32768.0f;
 			float rawRight = (float)HIWORD(level) / 32768.0f;
-			
+
 			// Apply the same volume scaling as the actual audio output
 			float streamVolume = g_radio.volume * (g_radio.signalStrength / 100.0f);
 			g_audio.vuLevelLeft = rawLeft * streamVolume;
@@ -1370,7 +1378,7 @@ void UpdateVULevels() {
 			// Apply static volume scaling
 			float staticVolume = (100.0f - g_radio.signalStrength) / 100.0f;
 			float scaledStaticVolume = g_radio.volume * staticVolume * g_audio.staticVolume;
-			
+
 			// Ensure minimum static when radio is on but no strong signal
 			if (g_radio.power && g_radio.signalStrength < 50.0f) {
 				scaledStaticVolume = fmax(scaledStaticVolume, g_radio.volume * 0.1f);
