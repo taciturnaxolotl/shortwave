@@ -1,53 +1,27 @@
 # Shortwave
 
-an app for [rewind](https://rewind.hackclub.com/#)
+a vintage shortwave radio tuner with internet streaming for [rewind](https://rewind.hackclub.com/#)
 
-![a screenshot of windows xp with a text editor open saying "this will be a very cool app soon; just you wait"](https://raw.githubusercontent.com/taciturnaxolotl/shortwave/main/.github/images/ss.webp)
+![a screenshot of windows xp with the app open to Jazz Radio: Smooth Jazz](https://raw.githubusercontent.com/taciturnaxolotl/shortwave/main/.github/images/ss.webp)
 
-## Install
+### Radio Stations
 
-You can download a pre-built binary from the releases or build it yourself using the nix flake.
+| Frequency (MHz) | Station Name         | Description                    |
+|-----------------|---------------------|--------------------------------|
+| 10.230          | SomaFM Groove       | Downtempo and chillout         |
+| 11.470          | WBGO Jazz88         | Jazz from Newark               |
+| 12.650          | Radio Paradise      | Eclectic music mix             |
+| 13.890          | Classical Music     | Classical radio                |
+| 15.120          | Jazz Radio          | Smooth jazz                    |
+| 16.350          | FIP                 | Eclectic French radio          |
+| 18.810          | TSF Jazz            | French jazz radio              |
+| 20.040          | Dublab              | Electronic and experimental    |
+| 21.270          | BBC World Service   | Global news and culture        |
+| 23.730          | WFMU                | Freeform experimental radio    |
+| 24.960          | ChillHop Music      | Lo-fi hip hop                  |
+| 27.420          | Worldwide FM        | Global music discovery         |
 
-## Development
-
-this project uses nix for cross-compilation to windows xp. the key was using an older nixpkgs (22.05) since newer mingw toolchains use windows apis that don't exist in xp.
-
-### Quick Start
-
-```bash
-# enter the dev environment (or use direnv)
-nix develop
-
-# build the app
-nix build
-
-# deploy to my xp vm folder
-deploy-to-xp
-```
-
-### Editor Setup (Zed)
-
-to get proper intellisense for win32 apis in zed:
-
-```bash
-# generate .clangd config with proper mingw headers
-setup-dev
-
-# restart zed
-```
-
-this creates a `.clangd` file that points to the actual mingw-w64 headers and avoids gcc intrinsics that cause clang issues.
-
-### Build Details
-
-- uses mingw-w64 cross-compiler targeting i686-w64-mingw32
-- statically links runtime to avoid dll dependencies  
-- targets windows xp (winver=0x0501) for maximum compatibility
-- older nixpkgs (22.05) prevents "procedure entry point" errors on xp
-
-~
-
-written in cpp. If you have any suggestions or issues feel free to open an issue on my [tangled](https://tangled.sh/@dunkirk.sh/shortwave) knot
+written in cpp; this project uses nix for cross-compilation to windows xp. the key was using an older nixpkgs (22.05) since newer mingw toolchains use windows apis that don't exist in xp. if you have any suggestions or need to open a ticket please do so on my [tangled](https://tangled.sh/@dunkirk.sh/shortwave) knot
 
 <p align="center">
 	<img src="https://raw.githubusercontent.com/taciturnaxolotl/carriage/master/.github/images/line-break.svg" />
