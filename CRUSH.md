@@ -8,6 +8,8 @@
 ## Build & Development Commands
 - **Build**: `nix build`
   - Compiles Shortwave Radio application
+- **Build Installer**: `nix build .#installer` or `build-installer`
+  - Creates Windows installer (ShortwaveRadioInstaller.exe)
 - **Dev Setup**: `setup-dev`
   - Generates `compile_commands.json`
 - **Deploy**: `deploy-to-xp`

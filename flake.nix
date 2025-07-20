@@ -65,12 +65,55 @@
               '';
             };
 
+            installer = pkgs.stdenv.mkDerivation {
+              name = "shortwave-installer";
+              version = "1.0.0";
+              src = ./.;
+
+              nativeBuildInputs = with pkgs; [
+                nsis
+              ];
+
+              buildInputs = [ self'.packages.shortwave ];
+              buildPhase = ''
+                # Create staging directory
+                mkdir -p staging
+
+                # Copy executable and DLLs
+                cp ${self'.packages.shortwave}/bin/Shortwave.exe staging/
+
+                cp libs/bass.dll staging/
+
+                cp shortwave.ico staging/
+
+                # Copy documentation
+                cp LICENSE.md staging/
+                cp README.md staging/
+
+                # Build installer
+                cd staging
+                makensis -NOCD ../installer.nsi
+
+                # Rename output to expected installer name
+                if [ -f ShortwaveRadioInstaller.exe ]; then
+                  mv ShortwaveRadioInstaller.exe ../
+                else
+                  echo "✗ Installer was not created by makensis"
+                  exit 1
+                fi
+                cd ..
+                ls
+              '';
+
+              installPhase = ''
+                mkdir -p $out/bin
+                cp ShortwaveRadioInstaller.exe $out/bin/
+              '';
+            };
+
             deploy-to-xp = pkgs.writeShellScriptBin "deploy-to-xp" ''
               echo "rebuilding program"
-              if ! nix build --rebuild; then
-                echo "Rebuild failed, attempting normal build..."
-                nix build
-              fi
+              nix build
 
               XP_DIR="$HOME/Documents/xp-drive"
               mkdir -p "$XP_DIR"
@@ -102,6 +145,19 @@
               ls -la "$XP_DIR"/*.{exe,dll} 2>/dev/null || echo "No files found"
             '';
 
+            build-installer = pkgs.writeShellScriptBin "build-installer" ''
+              echo "Building Shortwave Radio installer..."
+              nix build .#installer
+
+              if [ -f result/bin/ShortwaveRadioInstaller.exe ]; then
+                echo "✓ Installer built successfully: result/bin/ShortwaveRadioInstaller.exe"
+                ls -la result/bin/ShortwaveRadioInstaller.exe
+              else
+                echo "✗ Installer build failed"
+                exit 1
+              fi
+            '';
+
             default = self'.packages.shortwave;
           };
 
@@ -111,13 +167,16 @@
                 cmake
                 pkgsCross.mingw32.buildPackages.gcc
                 self'.packages.deploy-to-xp
+                self'.packages.build-installer
               ];
 
               shellHook = ''
                                 echo "Shortwave Radio development environment loaded"
                                 echo "Available commands:"
-                                echo "  nix build     - Build the Shortwave Radio application"
-                                echo "  deploy-to-xp  - Deploy to XP VM folder"
+                                echo "  nix build           - Build the Shortwave Radio application"
+                                echo "  nix build .#installer - Build Windows installer"
+                                echo "  build-installer     - Build installer (shortcut)"
+                                echo "  deploy-to-xp        - Deploy to XP VM folder"
                                 echo ""
                                 echo "Setting up development environment..."
 
