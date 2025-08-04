@@ -65,52 +65,6 @@
               '';
             };
 
-            installer = pkgs.stdenv.mkDerivation {
-              name = "shortwave-installer";
-              version = "1.0.0";
-              src = ./.;
-
-              nativeBuildInputs = with pkgs; [
-                nsis
-              ];
-
-              buildInputs = [ self'.packages.shortwave ];
-              buildPhase = ''
-                # Create staging directory
-                mkdir -p staging
-
-                # Copy executable and DLLs
-                cp ${self'.packages.shortwave}/bin/Shortwave.exe staging/
-
-                cp libs/bass.dll staging/
-
-                cp shortwave.ico staging/
-
-                # Copy documentation
-                cp LICENSE.md staging/
-                cp README.md staging/
-
-                # Build installer
-                cd staging
-                makensis -NOCD ../installer.nsi
-
-                # Rename output to expected installer name
-                if [ -f ShortwaveRadioInstaller.exe ]; then
-                  mv ShortwaveRadioInstaller.exe ../
-                else
-                  echo "✗ Installer was not created by makensis"
-                  exit 1
-                fi
-                cd ..
-                ls
-              '';
-
-              installPhase = ''
-                mkdir -p $out/bin
-                cp ShortwaveRadioInstaller.exe $out/bin/
-              '';
-            };
-
             deploy-to-xp = pkgs.writeShellScriptBin "deploy-to-xp" ''
               echo "rebuilding program"
               nix build
@@ -172,59 +126,47 @@
               ];
 
               shellHook = ''
-                                echo "Shortwave Radio development environment loaded"
-                                echo "Available commands:"
-                                echo "  nix build           - Build the Shortwave Radio application"
-                                echo "  nix build .#installer - Build Windows installer"
-                                echo "  build-installer     - Build installer (shortcut)"
-                                echo "  deploy-to-xp        - Deploy to XP VM folder"
-                                echo ""
-                                echo "Setting up development environment..."
+                # Get dynamic paths from nix packages
+                GCC_BASE="${pkgs.pkgsCross.mingw32.buildPackages.gcc}/i686-w64-mingw32"
+                SYS_INCLUDE="$GCC_BASE/sys-include"
+                MINGW_MAIN_INCLUDE="${pkgs.pkgsCross.mingw32.windows.mingw_w64.dev}/include"
+                CPP_INCLUDE="${pkgs.lib.getDev pkgs.pkgsCross.mingw32.buildPackages.gcc}/include/c++/10.3.0"
+                CPP_TARGET_INCLUDE="$CPP_INCLUDE/i686-w64-mingw32"
 
-                                # Get dynamic paths from nix packages
-                                GCC_BASE="${pkgs.pkgsCross.mingw32.buildPackages.gcc}/i686-w64-mingw32"
-                                SYS_INCLUDE="$GCC_BASE/sys-include"
-                                MINGW_MAIN_INCLUDE="${pkgs.pkgsCross.mingw32.windows.mingw_w64.dev}/include"
-                                CPP_INCLUDE="${pkgs.lib.getDev pkgs.pkgsCross.mingw32.buildPackages.gcc}/include/c++/10.3.0"
-                                CPP_TARGET_INCLUDE="$CPP_INCLUDE/i686-w64-mingw32"
+                # Auto-generate .clangd config with correct paths
+                cat > .clangd <<EOF
+                    CompileFlags:
+                        Add:
+                        - -target
+                        - i686-w64-mingw32
+                        - -DWINVER=0x0501
+                        - -D_WIN32_WINNT=0x0501
+                        - -DWIN32_LEAN_AND_MEAN
+                        - -D_WIN32
+                        - -DWIN32
+                        - -std=c++17
+                        - -fno-builtin
+                        - -isystem
+                        - $SYS_INCLUDE
+                        - -isystem
+                        - $MINGW_MAIN_INCLUDE
+                        - -isystem
+                        - $CPP_INCLUDE
+                        - -isystem
+                        - $CPP_TARGET_INCLUDE
+                        Remove:
+                        - -I*/gcc/*/include
+                    EOF
 
-                                # Auto-generate .clangd config with correct paths
-                                cat > .clangd << EOF
-                CompileFlags:
-                  Add:
-                    - -target
-                    - i686-w64-mingw32
-                    - -DWINVER=0x0501
-                    - -D_WIN32_WINNT=0x0501
-                    - -DWIN32_LEAN_AND_MEAN
-                    - -D_WIN32
-                    - -DWIN32
-                    - -std=c++17
-                    - -fno-builtin
-                    - -isystem
-                    - $SYS_INCLUDE
-                    - -isystem
-                    - $MINGW_MAIN_INCLUDE
-                    - -isystem
-                    - $CPP_INCLUDE
-                    - -isystem
-                    - $CPP_TARGET_INCLUDE
-                  Remove:
-                    - -I*/gcc/*/include
-                EOF
-
-                                cat > compile_commands.json << EOF
-                [
-                  {
-                    "directory": "$(pwd)",
-                    "command": "i686-w64-mingw32-g++ -DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -DWIN32_LEAN_AND_MEAN -D_WIN32 -DWIN32 -std=c++17 -isystem \"$SYS_INCLUDE\" -isystem \"$MINGW_MAIN_INCLUDE\" -isystem \"$CPP_INCLUDE\" -isystem \"$CPP_TARGET_INCLUDE\" -c main.cpp",
-                    "file": "main.cpp"
-                  }
-                ]
-                EOF
-
-                                echo "✓ Generated .clangd config and compile_commands.json with include paths"
-                                echo "✓ Development environment ready for Shortwave Radio development"
+                cat > compile_commands.json <<EOF
+                    [
+                      {
+                        "directory": "$(pwd)",
+                        "command": "i686-w64-mingw32-g++ -DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -DWIN32_LEAN_AND_MEAN -D_WIN32 -DWIN32 -std=c++17 -isystem \"$SYS_INCLUDE\" -isystem \"$MINGW_MAIN_INCLUDE\" -isystem \"$CPP_INCLUDE\" -isystem \"$CPP_TARGET_INCLUDE\" -c main.cpp",
+                        "file": "main.cpp"
+                      }
+                    ]
+                    EOF
               '';
             };
           };
