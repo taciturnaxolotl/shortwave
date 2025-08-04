@@ -44,28 +44,28 @@ functionEnd
 
 section "install"
     setOutPath $INSTDIR
-    
+
     ; Main executable
-    file "Shortwave.exe"
-    
+    file "result/bin/Shortwave.exe"
+
     ; BASS audio library
-    file "bass.dll"
-    
+    file "libs/bass.dll"
+
     ; License and documentation
     file "LICENSE.md"
     file "README.md"
-    
+
     ; Create uninstaller
     writeUninstaller "$INSTDIR\uninstall.exe"
-    
+
     ; Start menu shortcuts
     createDirectory "$SMPROGRAMS\${APPNAME}"
     createShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\Shortwave.exe"
     createShortCut "$SMPROGRAMS\${APPNAME}\Uninstall.lnk" "$INSTDIR\uninstall.exe"
-    
+
     ; Desktop shortcut
     createShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\Shortwave.exe"
-    
+
     ; Registry entries for Add/Remove Programs
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayName" "${APPNAME} - ${DESCRIPTION}"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
@@ -99,16 +99,16 @@ section "uninstall"
     delete "$INSTDIR\LICENSE.md"
     delete "$INSTDIR\README.md"
     delete "$INSTDIR\uninstall.exe"
-    
+
     ; Remove shortcuts
     delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
     delete "$SMPROGRAMS\${APPNAME}\Uninstall.lnk"
     rmDir "$SMPROGRAMS\${APPNAME}"
     delete "$DESKTOP\${APPNAME}.lnk"
-    
+
     ; Remove registry entries
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
-    
+
     ; Remove installation directory
     rmDir "$INSTDIR"
 sectionEnd

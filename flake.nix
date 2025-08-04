@@ -168,6 +168,7 @@
                 pkgsCross.mingw32.buildPackages.gcc
                 self'.packages.deploy-to-xp
                 self'.packages.build-installer
+                nsis
               ];
 
               shellHook = ''

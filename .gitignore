@@ -5,3 +5,4 @@ result
 .clangd
 compile_commands.json
 build/
+ShortwaveRadioInstaller.exe
